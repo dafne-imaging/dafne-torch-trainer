@@ -85,6 +85,9 @@ class TrainingWorker(QThread):
     # Send error information to user console
     sig_error = pyqtSignal(str)
 
+    # progress values to sent to GUI
+    sig_process = pyqtSignal(int)
+
     # Send message when training ended
     sig_finished = pyqtSignal()
 
@@ -92,7 +95,8 @@ class TrainingWorker(QThread):
                  file_list:list,
                  model_params:dict,
                  train_params:dict, 
-                 mask_list:list=None):
+                 mask_list:list=None,
+                 save_path:str=None):
         super().__init__()
         
         # inzialize worker parameters
@@ -100,6 +104,7 @@ class TrainingWorker(QThread):
         self.mask_list = mask_list
         self.model_params = model_params
         self.train_params = train_params
+        self.save_path = save_path
 
         self.is_running = True
 
@@ -112,8 +117,12 @@ class TrainingWorker(QThread):
         '''
 
         self.sig_update_plot.emit(loss, img, mask)
-        total = self.train_params.get('epochs')
-        self.sig_status.emit(f"Epoch {epoch+1}/{total} | Loss: {loss:.3f}")
+        total_epochs = self.train_params.get('epochs')
+        current_epoch = epoch + 1
+        percent = int((current_epoch / total_epochs) * 100)
+
+        self.sig_process.emit(percent) # -> send epochs percent to progress bar
+        self.sig_status.emit(f"Epoch {current_epoch}/{total_epochs} | Loss: {loss:.3f}")
     
     def _callback_check_stop(self):
         '''
@@ -131,6 +140,9 @@ class TrainingWorker(QThread):
         :param message: log description
         '''
         self.sig_status.emit(message)
+    
+    def _save_model(self):
+        return
 
     # implementation of run method that will be run in separate Thread
     def run(self):
@@ -177,8 +189,12 @@ class TrainingWorker(QThread):
                 on_log=self._callback_log
             )
 
+            if self.save_path: 
+                self.sig_status.emit(f"Saving model to {self.save_path}...")
+                torch.save(model.state_dict(), self.save_path)
+                print(f'Model weights saved in {self.save_path}')
             self.sig_finished.emit()
-
+            
         except Exception as e:
             traceback.print_exc()
             self.sig_error.emit(str(e))

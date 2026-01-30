@@ -3,3 +3,4 @@ dafne-dl
 matplotlib
 monai[all]
 torch
+SimpleITK

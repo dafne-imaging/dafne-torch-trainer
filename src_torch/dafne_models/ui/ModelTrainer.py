@@ -30,6 +30,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.setWindowTitle('Dafne Model Trainer (PyTorch Backend)')
         
+        self.save_path = None
         self.worker = None #training thread
         self.image_paths = [] #path to images
         self.mask_paths = [] #path to masks
@@ -41,12 +42,14 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.fit_output_box.setVisible(False)
         self.advanced_widget.setVisible(False)
         self.fit_Button.setEnabled(False)
+        self.save_choose_Button.setEnabled(True)
         self.preprocess_Button.setEnabled(False)
 
         self._init_matplotlib_canvas()
 
         self.choose_Button.clicked.connect(self.select_data)
-        self.advanced_button.clicked.connect(self.toggle_adavanced_options)
+        self.advanced_button.clicked.connect(self.toggle_advanced_options)
+        self.save_choose_Button.clicked.connect(self.select_save_path)
 
         self.fit_Button.clicked.connect(self.start_training)
     
@@ -69,6 +72,23 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def toggle_advanced_option(self):
         is_visible = self.advanced_widget.isVisible()
         self.advanced_widget.setVisible(not is_visible)
+    
+    def select_save_path(self):
+        options = QFileDialog.Options()
+        filename, _ = QFileDialog.getSaveFileName(
+            self,
+            "Choose save model path",
+            "",
+            "Pytorch Model (.pth);;All files (*)",
+            options=options
+        )
+
+        if filename:
+            if not filename.endswith('.pth'):
+                filename += '.pth'
+        
+        self.save_path = filename
+        self.model_location_Text.setText(filename)
      
     def select_data(self):      
         folder_path = QtWidgets.QFileDialog.getExistingDirectory(
@@ -80,7 +100,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         
         self.location_Text.setText(folder_path)
         extensions = ['.npz', '.nii', '.nii.gz', '.dcm']
-        found_files = self._scan_directory(folder_path, extensions)
+        found_files = self._scan_directory_folds(folder_path, extensions)
 
         if not found_files:
             QMessageBox.warning(self, "No data found", f'Folder selected does not contain valid extension {extensions}')
@@ -108,6 +128,23 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         except Exception as e:
             print(f"Error scanning directory {folder_path}: {e}")
             return []
+    
+    def _scan_directory_folds(self, folder_path, extensions):
+        found_files = []
+        try: 
+            for root, _, files in os.walk(folder_path, topdown=True):
+                for file in files: 
+                    if any(file.endswith(ext) for ext in extensions):
+                        full_path = os.path.join(root, file)
+                        found_files.append(full_path)
+            found_files.sort()
+            return found_files
+        except Exception as e:
+            print(f"Error scanning directory {folder_path}: {e}")
+            return []
+
+    def update_progress_bar(self, percent):
+        self.progressBar.setValue(percent)
     
     def start_training(self):
         if not self.image_paths:
@@ -147,11 +184,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             file_list=self.image_paths,
             mask_list=self.mask_paths,
             model_params=model_params,
-            train_params=train_params
+            train_params=train_params,
+            save_path=self.save_path
         )
 
         self.worker.sig_update_plot.connect(self.update_plots)
         self.worker.sig_status.connect(self.update_status_label)
+        self.worker.sig_process.connect(self.update_progress_bar)
         self.worker.sig_error.connect(self.handle_error)
         self.worker.sig_finished.connect(self.on_training_finished)
 
@@ -159,10 +198,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     
     def update_status_label(self, message): 
         self.progress_Label.setText(message)
-        if self.progressBar.value() < 99:
-            self.progressBar.setValue(self.progressBar.value() + 1)
-        else: 
-            self.progressBar.setValue(0)
     
     @QtCore.pyqtSlot(float, object, object)
     def update_plots(self, loss, img, mask):

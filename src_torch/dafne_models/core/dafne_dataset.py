@@ -96,3 +96,49 @@ class DafneCacheDataset(CacheDataset):
 
     def __len__(self):
         return len(self.image_files)
+    
+if __name__ == "__main__":
+    import os
+    import sys
+    import matplotlib.pyplot as plt
+
+    # test cachedataset
+    root_data_dir = "/Users/giuseppetimpano/Desktop/Project code/dafne-project/Test_images/npz_test" 
+    
+    all_npz_files = []
+    for root, dirs, files in os.walk(root_data_dir):
+        for file in files:
+            if file.endswith('.npz'):
+                all_npz_files.append(os.path.join(root, file))
+    
+    all_npz_files.sort()
+
+    try:
+        dataset = DafneCacheDataset(image_files=all_npz_files, mask_files=None, cache_rate=0.0)
+        print("Dataset correctly done")
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+    try:
+        print("\n--- ANALISI PRIMO CAMPIONE ---")
+        first_sample = dataset[76] # Chiama __getitem__ e applica le trasformate
+        
+        img = first_sample['image']
+        mask = first_sample['mask']
+        print(np.unique(mask))
+
+        print(f"File: {all_npz_files[0]}")
+        print(f"Shape Immagine: {img.shape}") # (C, H, W)
+        print(f"Shape Maschera: {mask.shape}")
+        print(f"Tipo Dati: {img.dtype}")
+        
+        # Opzionale: Visualizzazione rapida se sei in un ambiente grafico
+        plt.imshow(img[0, :, :], cmap='gray')
+        plt.imshow(mask[0, :, :], cmap='gray', alpha=0.5)
+        plt.show()
+
+    except Exception as e:
+        print(f"❌ Errore durante il caricamento del campione: {e}")
+        import traceback
+        traceback.print_exc()
