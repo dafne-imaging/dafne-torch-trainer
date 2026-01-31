@@ -1,19 +1,26 @@
 # ------- Load dependecies ------------------ # 
 import sys
 import traceback
+import random as rd
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
+
 from monai.data import DataLoader
+from monai.losses import DiceLoss
+from monai.metrics import DiceMetric
 
 from PyQt5.QtCore import QThread, pyqtSignal
+
+from sklearn.model_selection import train_test_split
 
 from ..models import dafne_network
 
 # definition of classic training loop
 def pytorch_training_loop(model, 
-                          dataloader,
+                          train_dataloader,
+                          valid_dataloader,
                           optimizer, 
                           criterion,
                           device,
@@ -24,6 +31,9 @@ def pytorch_training_loop(model,
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
     
+    dice_metric = DiceMetric(include_background=False, reduction='mean')
+    best_val_dice_score = 0.0
+
     for epoch in range(epochs):
         
         # check training stop  by user
@@ -35,9 +45,9 @@ def pytorch_training_loop(model,
         model.train()
         epoch_loss = 0.0
         
-        for batch in dataloader:
+        for batch in train_dataloader:
             inputs = batch['image'].to(device)
-            targets = batch['mask'].long().squeeze(1).to(device)
+            targets = batch['mask'].long().to(device)
             
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -47,9 +57,45 @@ def pytorch_training_loop(model,
 
             epoch_loss += loss.item()
         
-        avg_loss = epoch_loss / len(dataloader)
+        avg_loss = epoch_loss / len(train_dataloader)
 
-        if on_epoch_end is not None:
+        with torch.no_grad():
+            for batch in valid_dataloader:
+                val_image = batch['image']
+                val_mask = batch['mask']
+                if on_epoch_end is not None:
+                    model.eval()
+                    val_output = model(val_image)
+                    val_pred = torch.argmax(val_output, dim=1, keepdim=True)
+                    dice_metric(y_pred=val_pred, y=val_mask)
+            dice_score = dice_metric.aggregate().item()
+            dice_metric.reset()
+
+            if dice_score > best_val_dice_score:
+                best_val_dice_score = dice_score
+            
+            #take first valid image for first batch to display during training
+            sample_batch = next(iter(valid_dataloader))
+            val_image = sample_batch['image'][0].to(device)
+            val_mask = sample_batch['mask'][0].to(device)
+            val_pred_out = model(val_image.unsqueeze(0))
+            val_pred = torch.argmax((val_pred_out), dim=1).float()
+
+            dims = val_image.shape
+            if len(dims)==5:
+                img_np = val_image[0, :, :, dims[3]//2].cpu().numpy()
+                pred_np = val_pred[0, :, :, dims[3]//2].cpu().numpy()
+            elif len(dims)==4:
+                img_np = val_image[0, :, :].cpu().numpy()
+                mask_np = val_mask[0, 0, :].cpu().numpy()
+                pred_np = val_pred[0, :, :].cpu().numpy()
+
+                # send to GUI for each epoch, the current epoch, avg_loss and rand image
+                # and his model predicted mask
+            if on_epoch_end:    
+                on_epoch_end(epoch, avg_loss, img_np, pred_np)
+
+        '''if on_epoch_end is not None:
             # preview during trainging results
             model.eval()
             sample_in = inputs[0].unsqueeze(0)
@@ -64,9 +110,9 @@ def pytorch_training_loop(model,
                     img_np = inputs[0].cpu().numpy()[0]
                     mask_np = pred_mask.cpu().numpy()[0] 
                 
-                on_epoch_end(epoch, avg_loss, img_np, mask_np)
+                on_epoch_end(epoch, avg_loss, img_np, mask_np)'''
         
-    if on_log: on_log(f'Trainging engine finished')
+    if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
 
 class TrainingWorker(QThread):
@@ -86,7 +132,7 @@ class TrainingWorker(QThread):
     sig_error = pyqtSignal(str)
 
     # progress values to sent to GUI
-    sig_process = pyqtSignal(int)
+    sig_progress = pyqtSignal(int)
 
     # Send message when training ended
     sig_finished = pyqtSignal()
@@ -121,7 +167,7 @@ class TrainingWorker(QThread):
         current_epoch = epoch + 1
         percent = int((current_epoch / total_epochs) * 100)
 
-        self.sig_process.emit(percent) # -> send epochs percent to progress bar
+        self.sig_progress.emit(percent) # -> send epochs percent to progress bar
         self.sig_status.emit(f"Epoch {current_epoch}/{total_epochs} | Loss: {loss:.3f}")
     
     def _callback_check_stop(self):
@@ -163,26 +209,46 @@ class TrainingWorker(QThread):
                                                  n_levels=self.model_params.get('n_levels', 5),
                                                  kernel_size=self.model_params.get('kernel_size', 3),
                                                  out_channels=self.model_params.get('n_classes', 2),
-                                                 in_channels=self.model_params.get('in_channels', 1))
+                                                 in_channels=self.model_params.get('in_channels', 1)).to(self.device)
+            # split dataset into train and validation
+            if self.mask_list is None:
+                train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
+                train_mask, valid_mask = None, None
+            else: 
+                train_list, valid_list, train_mask, valid_mask = train_test_split(self.file_list, 
+                                                                              test_size=0.2, random_state=42)
+            
+            train_dataset = DafneCacheDataset(image_files=train_list,
+                                        mask_files=train_mask,
+                                        cache_rate=1.0)
+            valid_dataset = DafneCacheDataset(image_files=valid_list,
+                                        mask_files=valid_mask,
+                                        cache_rate=1.0)
             dataset = DafneCacheDataset(image_files=self.file_list,
                                         mask_files=self.mask_list,
                                         cache_rate=1.0)
+            
             # batch size must be choose by user before train
-            dataloader = DataLoader(dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2))
+            #dataloader = DataLoader(dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2))
+            train_dataloader = DataLoader(train_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=True)
+            valid_dataloader = DataLoader(valid_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=False)
             optimizer = torch.optim.Adam(model.parameters(), lr=self.train_params.get('learning_rate', 0.001))
             
             # define loss criterion
-            # this is an example
-            criterion = nn.CrossEntropyLoss()
+            # define dice loss as criterion
+            #criterion = nn.CrossEntropyLoss()
+            criterion = DiceLoss(include_background=False, 
+                                 softmax=True,
+                                 to_onehot_y=True)
 
             pytorch_training_loop(
                 model=model,
                 optimizer=optimizer,
-                dataloader = dataloader,
+                train_dataloader = train_dataloader,
+                valid_dataloader = valid_dataloader,
                 criterion=criterion,
                 device=self.device,
                 epochs=self.train_params.get('epochs', 100),
-
                 #callback injection
                 on_epoch_end=self._callback_epoch_end,
                 check_stop=self._callback_check_stop,

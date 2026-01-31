@@ -190,7 +190,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.worker.sig_update_plot.connect(self.update_plots)
         self.worker.sig_status.connect(self.update_status_label)
-        self.worker.sig_process.connect(self.update_progress_bar)
+        self.worker.sig_progress.connect(self.update_progress_bar)
         self.worker.sig_error.connect(self.handle_error)
         self.worker.sig_finished.connect(self.on_training_finished)
 
