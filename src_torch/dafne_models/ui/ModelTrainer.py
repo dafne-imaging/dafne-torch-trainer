@@ -156,6 +156,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.fit_output_box.setVisible(True)
 
         self.loss_history = []
+        self.val_loss_history = []
         self.ax_loss.clear()
         self.ax_preview.clear()
         self.progressBar.setValue(0)
@@ -199,11 +200,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def update_status_label(self, message): 
         self.progress_Label.setText(message)
     
-    @QtCore.pyqtSlot(float, object, object)
-    def update_plots(self, loss, img, mask):
+    @QtCore.pyqtSlot(float, object, object, float)
+    def update_plots(self, loss, img, mask, val_loss):
         self.loss_history.append(loss)
+        self.val_loss_history.append(val_loss)
         self.ax_loss.clear()
         self.ax_loss.plot(self.loss_history, 'r-', label='Training Loss')
+        self.ax_loss.plot(self.val_loss_history, 'b-', label='Validation Loss')
         self.ax_loss.set_title(f'Loss: {loss:.4f}')
         self.ax_loss.grid(True, alpha=0.5)
 

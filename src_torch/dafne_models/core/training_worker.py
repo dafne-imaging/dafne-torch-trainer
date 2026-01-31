@@ -25,9 +25,11 @@ def pytorch_training_loop(model,
                           criterion,
                           device,
                           epochs,
+                          save_path:str=None,
                           on_epoch_end=None,
                           check_stop=None,
-                          on_log=None):
+                          on_log=None
+                          ):
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
     
@@ -59,21 +61,32 @@ def pytorch_training_loop(model,
         
         avg_loss = epoch_loss / len(train_dataloader)
 
+        val_loss = 0.0
         with torch.no_grad():
             for batch in valid_dataloader:
-                val_image = batch['image']
-                val_mask = batch['mask']
+                val_image = batch['image'].to(device)
+                val_mask = batch['mask'].to(device)
                 if on_epoch_end is not None:
                     model.eval()
                     val_output = model(val_image)
                     val_pred = torch.argmax(val_output, dim=1, keepdim=True)
                     dice_metric(y_pred=val_pred, y=val_mask)
+                    val_loss += criterion(val_pred, val_mask).item()
             dice_score = dice_metric.aggregate().item()
+
             dice_metric.reset()
 
             if dice_score > best_val_dice_score:
                 best_val_dice_score = dice_score
             
+            if save_path:
+                try: 
+                    torch.save(model.state_dict(), save_path)
+                    if on_log: 
+                        on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
+                except Exception as e: 
+                        print('Error during model saving {e}')
+                
             #take first valid image for first batch to display during training
             sample_batch = next(iter(valid_dataloader))
             val_image = sample_batch['image'][0].to(device)
@@ -82,38 +95,24 @@ def pytorch_training_loop(model,
             val_pred = torch.argmax((val_pred_out), dim=1).float()
 
             dims = val_image.shape
-            if len(dims)==5:
-                img_np = val_image[0, :, :, dims[3]//2].cpu().numpy()
-                pred_np = val_pred[0, :, :, dims[3]//2].cpu().numpy()
-            elif len(dims)==4:
+            if len(dims)==4:
+                img_np = val_image[0, :, dims[3]//2].cpu().numpy()
+                pred_np = val_pred[0, :, dims[3]//2].cpu().numpy()
+            elif len(dims)==3:
                 img_np = val_image[0, :, :].cpu().numpy()
-                mask_np = val_mask[0, 0, :].cpu().numpy()
                 pred_np = val_pred[0, :, :].cpu().numpy()
 
                 # send to GUI for each epoch, the current epoch, avg_loss and rand image
                 # and his model predicted mask
             if on_epoch_end:    
-                on_epoch_end(epoch, avg_loss, img_np, pred_np)
-
-        '''if on_epoch_end is not None:
-            # preview during trainging results
-            model.eval()
-            sample_in = inputs[0].unsqueeze(0)
-            sample_out = model(sample_in)
-            pred_mask = torch.argmax(sample_out, dim=1)
-            with torch.no_grad():
-                dims = inputs.shape
-                if len(dims)==5: #[B, C, H, W, D]
-                    img_np = inputs[0, 0, :, :, dims[4]//2].cpu().numpy()
-                    mask_np = pred_mask[0, 0, :, :, dims[4]//2].cpu().numpy()
-                elif len(dims)==4:
-                    img_np = inputs[0].cpu().numpy()[0]
-                    mask_np = pred_mask.cpu().numpy()[0] 
-                
-                on_epoch_end(epoch, avg_loss, img_np, mask_np)'''
-        
+                on_epoch_end(epoch, avg_loss, img_np, pred_np, val_loss)
+       
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
+def count_label_mask(masks):
+    # implement code to count number of labels
+    # implement only for .npz data type
+    return
 
 class TrainingWorker(QThread):
 
@@ -123,7 +122,7 @@ class TrainingWorker(QThread):
     '''
     
     # Send data to cpu (float, numpy, numpy)
-    sig_update_plot = pyqtSignal(float, object, object)
+    sig_update_plot = pyqtSignal(float, object, object, float)
 
     # Send status information for user console
     sig_status = pyqtSignal(str)
@@ -156,13 +155,13 @@ class TrainingWorker(QThread):
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def _callback_epoch_end(self, epoch, loss, img, mask):
+    def _callback_epoch_end(self, epoch, loss, img, mask, val_loss):
         
         '''
         Function called at the end of each epoch by the Engine
         '''
 
-        self.sig_update_plot.emit(loss, img, mask)
+        self.sig_update_plot.emit(loss, img, mask, val_loss)
         total_epochs = self.train_params.get('epochs')
         current_epoch = epoch + 1
         percent = int((current_epoch / total_epochs) * 100)
@@ -224,19 +223,13 @@ class TrainingWorker(QThread):
             valid_dataset = DafneCacheDataset(image_files=valid_list,
                                         mask_files=valid_mask,
                                         cache_rate=1.0)
-            dataset = DafneCacheDataset(image_files=self.file_list,
-                                        mask_files=self.mask_list,
-                                        cache_rate=1.0)
             
             # batch size must be choose by user before train
-            #dataloader = DataLoader(dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2))
             train_dataloader = DataLoader(train_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=True)
             valid_dataloader = DataLoader(valid_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=False)
             optimizer = torch.optim.Adam(model.parameters(), lr=self.train_params.get('learning_rate', 0.001))
             
             # define loss criterion
-            # define dice loss as criterion
-            #criterion = nn.CrossEntropyLoss()
             criterion = DiceLoss(include_background=False, 
                                  softmax=True,
                                  to_onehot_y=True)
@@ -250,15 +243,16 @@ class TrainingWorker(QThread):
                 device=self.device,
                 epochs=self.train_params.get('epochs', 100),
                 #callback injection
+                save_path=self.save_path,
                 on_epoch_end=self._callback_epoch_end,
                 check_stop=self._callback_check_stop,
                 on_log=self._callback_log
             )
 
-            if self.save_path: 
+            '''if self.save_path: 
                 self.sig_status.emit(f"Saving model to {self.save_path}...")
                 torch.save(model.state_dict(), self.save_path)
-                print(f'Model weights saved in {self.save_path}')
+                print(f'Model weights saved in {self.save_path}')'''
             self.sig_finished.emit()
             
         except Exception as e:

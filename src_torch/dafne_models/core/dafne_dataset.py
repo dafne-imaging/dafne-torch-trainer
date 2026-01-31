@@ -7,7 +7,8 @@ from monai.transforms import (
     ScaleIntensityd,
     MapTransform,
     LoadImage,
-    ToTensord
+    ToTensord,
+    Resized
     )
 
 class MapTransformLoadData(MapTransform):
@@ -87,7 +88,12 @@ class DafneCacheDataset(CacheDataset):
                 MapTransformLoadData(keys=keys_to_load),
                 EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
                 ScaleIntensityd(keys=['image']),
-                ToTensord(keys=['image', 'mask'])
+                ToTensord(keys=['image', 'mask']),
+                Resized(
+                    keys=['image', 'mask'], 
+                    spatial_size=(256, 256), 
+                    mode=['bilinear', 'nearest'] 
+                )
             ])
         else: 
             self.transform = transform

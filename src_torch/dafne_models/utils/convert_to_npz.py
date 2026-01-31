@@ -2,6 +2,8 @@ import os
 import SimpleITK as sitk
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 # convert panters dataset into npz
 
 def read_mha(image_path, mask_path):
@@ -28,8 +30,8 @@ def save_slices(image, mask, output_dir, patient_name):
         filename = f"slice_{idx:03d}.npz"
         np.savez_compressed(
             os.path.join(patient_folder, filename),
-            arr_0=image[idx],
-            arr_1 =mask[idx]
+            arr_0 = np.flip(image[idx], axis=0),
+            arr_1 = np.flip(mask[idx], axis=0)
         )
 
 if __name__ == "__main__":
