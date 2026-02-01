@@ -29,7 +29,8 @@ def pytorch_training_loop(model,
                           save_path:str=None,
                           on_epoch_end=None,
                           check_stop=None,
-                          on_log=None
+                          on_log=None, 
+                          early_stopping:bool=False
                           ):
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
@@ -90,11 +91,11 @@ def pytorch_training_loop(model,
                 
             #take random valid image of batch from random valid dataloader
             #sample_batch = next(iter(valid_dataloader))
-            sample_batch = rd.choices(list(valid_dataloader)) #random batch 
-            batch_dim = sample_batch['image'].shape[0]
-            rd_idx = rd.randrange(batch_dim)
-            val_image = sample_batch['image'][rd_idx].to(device)
-            val_mask = sample_batch['mask'][rd_idx].to(device)
+            dataset = valid_dataloader.dataset
+            idx = rd.randrange(len(dataset))
+            sample = dataset[idx]
+            val_image = sample['image'].to(device)
+            val_mask = sample['mask'].to(device)
 
             model.eval()
             with torch.no_grad():
@@ -152,7 +153,8 @@ class TrainingWorker(QThread):
                  model_params:dict,
                  train_params:dict, 
                  mask_list:list=None,
-                 save_path:str=None):
+                 save_path:str=None,
+                 early_stopping:bool=False):
         super().__init__()
         
         # inzialize worker parameters
@@ -163,6 +165,7 @@ class TrainingWorker(QThread):
         self.save_path = save_path
 
         self.is_running = True
+        self.early_stopping = early_stopping
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -259,7 +262,8 @@ class TrainingWorker(QThread):
                 save_path=self.save_path,
                 on_epoch_end=self._callback_epoch_end,
                 check_stop=self._callback_check_stop,
-                on_log=self._callback_log
+                on_log=self._callback_log,
+                early_stopping=self.early_stopping
             )
 
             '''if self.save_path: 

@@ -44,6 +44,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.fit_Button.setEnabled(False)
         self.save_choose_Button.setEnabled(True)
         self.preprocess_Button.setEnabled(False)
+        self.train_settings_widget.setVisible(False)
 
         self._init_matplotlib_canvas()
 
@@ -171,6 +172,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         lr = self.lr_spin.value()
         epochs = self.epochs_spin.value()
 
+        early_stopping = self.early_stopping_check.isChecked()
+
         model_params = {
             'spatial_dims': 2,
             'n_levels': n_levels,
@@ -191,7 +194,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             mask_list=self.mask_paths,
             model_params=model_params,
             train_params=train_params,
-            save_path=self.save_path
+            save_path=self.save_path,
+            early_stopping=early_stopping
         )
 
         self.worker.sig_update_plot.connect(self.update_plots)
@@ -267,5 +271,4 @@ def main():
     app = QtWidgets.QApplication(sys.argv)
     window = ModelTrainer()
     window.show()
-    print("GUI avviata in modalità Test.")
     sys.exit(app.exec_())
