@@ -88,10 +88,13 @@ def pytorch_training_loop(model,
                     except Exception as e: 
                             print('Error during model saving {e}')
                 
-            #take first valid image for first batch to display during training
-            sample_batch = next(iter(valid_dataloader))
-            val_image = sample_batch['image'][0].to(device)
-            val_mask = sample_batch['mask'][0].to(device)
+            #take random valid image of batch from random valid dataloader
+            #sample_batch = next(iter(valid_dataloader))
+            sample_batch = rd.choices(list(valid_dataloader)) #random batch 
+            batch_dim = sample_batch['image'].shape[0]
+            rd_idx = rd.randrange(batch_dim)
+            val_image = sample_batch['image'][rd_idx].to(device)
+            val_mask = sample_batch['mask'][rd_idx].to(device)
 
             model.eval()
             with torch.no_grad():
@@ -103,8 +106,8 @@ def pytorch_training_loop(model,
                     img_np = val_image[0, :, dims[2]//2].cpu().numpy()
                     pred_np = val_pred[0, :, dims[2]//2].cpu().numpy()
                 elif len(dims)==3:
-                    img_np = val_image[0, :, :].cpu().numpy()
-                    pred_np = val_pred[0, :, :].cpu().numpy()
+                    img_np = val_image[0].cpu().numpy()
+                    pred_np = val_pred[0].cpu().numpy()
 
                 # send to GUI for each epoch, the current epoch, avg_loss and rand image
                 # and his model predicted mask
@@ -114,7 +117,7 @@ def pytorch_training_loop(model,
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
 def count_label_mask(data_list:list):
-    # count number of labels in mask
+    # count number of labels in train masks
     labels = set()
     for d in data_list:
         mask_data = np.load(d)['arr_1']

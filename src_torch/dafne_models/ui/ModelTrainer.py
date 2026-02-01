@@ -49,6 +49,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.choose_Button.clicked.connect(self.select_data)
         self.advanced_button.clicked.connect(self.toggle_advanced_options)
+        self.train_settings_btn.clicked.connect(self.toggle_advanced_options_training)
         self.save_choose_Button.clicked.connect(self.select_save_path)
 
         self.fit_Button.clicked.connect(self.start_training)
@@ -166,6 +167,10 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         kernel_size = self.kernsize_spin.value()
         # conv_layers = self.convlayers_spin.value()
 
+        batch_size = self.batch_spin.value()
+        lr = self.lr_spin.value()
+        epochs = self.epochs_spin.value()
+
         model_params = {
             'spatial_dims': 2,
             'n_levels': n_levels,
@@ -176,9 +181,9 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         # default values: to be change by the user
         train_params = {
-            'epochs': 50,
-            'learning_rate': 1e-3,
-            'batch_size': 2
+            'epochs': epochs,
+            'learning_rate': lr,
+            'batch_size': batch_size
         }
 
         self.worker = TrainingWorker(
@@ -237,6 +242,16 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def _reset_ui_state(self):
         self.fit_Button.setEnabled(True)
         self.choose_Button.setEnabled(True)
+    
+    def toggle_advanced_options_training(self):
+        is_visible = self.train_settings_widget.isVisible()
+        new_state = not is_visible
+        self.train_settings_widget.setVisible(new_state)
+
+        if new_state:
+            self.train_settings_btn.setText("Hide Training Settings")
+        else: 
+            self.train_settings_btn.setText("Show Training Settings")
     
     def toggle_advanced_options(self):
         is_visible = self.advanced_widget.isVisible()
