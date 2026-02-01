@@ -2,6 +2,7 @@
 import sys
 import traceback
 import random as rd
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -33,8 +34,8 @@ def pytorch_training_loop(model,
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
     
-    dice_metric = DiceMetric(include_background=False, reduction='mean')
-    best_val_dice_score = 0.0
+    dice_metric = DiceMetric(include_background=True, reduction='mean')
+    best_val_dice_score = -float("inf")
 
     for epoch in range(epochs):
         
@@ -62,57 +63,64 @@ def pytorch_training_loop(model,
         avg_loss = epoch_loss / len(train_dataloader)
 
         val_loss = 0.0
+        model.eval()
         with torch.no_grad():
             for batch in valid_dataloader:
                 val_image = batch['image'].to(device)
-                val_mask = batch['mask'].to(device)
-                if on_epoch_end is not None:
-                    model.eval()
-                    val_output = model(val_image)
-                    val_pred = torch.argmax(val_output, dim=1, keepdim=True)
-                    dice_metric(y_pred=val_pred, y=val_mask)
-                    val_loss += criterion(val_pred, val_mask).item()
+                val_mask = batch['mask'].long().to(device)
+                val_output = model(val_image)
+                val_pred = torch.argmax(val_output, dim=1)
+                dice_metric(y_pred=val_pred.unsqueeze(1), y=val_mask)
+                val_loss += criterion(val_output, val_mask).item()
             dice_score = dice_metric.aggregate().item()
+            avg_val_loss = val_loss / len(valid_dataloader)
 
             dice_metric.reset()
 
             if dice_score > best_val_dice_score:
                 best_val_dice_score = dice_score
             
-            if save_path:
-                try: 
-                    torch.save(model.state_dict(), save_path)
-                    if on_log: 
-                        on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
-                except Exception as e: 
-                        print('Error during model saving {e}')
+                if save_path:
+                    try: 
+                        torch.save(model.state_dict(), save_path)
+                        if on_log: 
+                            on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
+                    except Exception as e: 
+                            print('Error during model saving {e}')
                 
             #take first valid image for first batch to display during training
             sample_batch = next(iter(valid_dataloader))
             val_image = sample_batch['image'][0].to(device)
             val_mask = sample_batch['mask'][0].to(device)
-            val_pred_out = model(val_image.unsqueeze(0))
-            val_pred = torch.argmax((val_pred_out), dim=1).float()
 
-            dims = val_image.shape
-            if len(dims)==4:
-                img_np = val_image[0, :, dims[3]//2].cpu().numpy()
-                pred_np = val_pred[0, :, dims[3]//2].cpu().numpy()
-            elif len(dims)==3:
-                img_np = val_image[0, :, :].cpu().numpy()
-                pred_np = val_pred[0, :, :].cpu().numpy()
+            model.eval()
+            with torch.no_grad():
+                val_pred_out = model(val_image.unsqueeze(0))
+                val_pred = torch.argmax((val_pred_out), dim=1).float()
+
+                dims = val_image.shape
+                if len(dims)==4:
+                    img_np = val_image[0, :, dims[2]//2].cpu().numpy()
+                    pred_np = val_pred[0, :, dims[2]//2].cpu().numpy()
+                elif len(dims)==3:
+                    img_np = val_image[0, :, :].cpu().numpy()
+                    pred_np = val_pred[0, :, :].cpu().numpy()
 
                 # send to GUI for each epoch, the current epoch, avg_loss and rand image
                 # and his model predicted mask
-            if on_epoch_end:    
-                on_epoch_end(epoch, avg_loss, img_np, pred_np, val_loss)
+                if on_epoch_end:    
+                    on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss)
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
-def count_label_mask(masks):
-    # implement code to count number of labels
-    # implement only for .npz data type
-    return
+def count_label_mask(data_list:list):
+    # count number of labels in mask
+    labels = set()
+    for d in data_list:
+        mask_data = np.load(d)['arr_1']
+        count = np.unique(mask_data)
+        labels.update(np.unique(count))
+    return len(labels)
 
 class TrainingWorker(QThread):
 
@@ -202,13 +210,6 @@ class TrainingWorker(QThread):
             self.sig_status.emit(f"Training initialization on: {self.device} device")
             self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...)")
             
-            # define model that has be trained
-            # this is an example of unet model
-            model = dafne_network.DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
-                                                 n_levels=self.model_params.get('n_levels', 5),
-                                                 kernel_size=self.model_params.get('kernel_size', 3),
-                                                 out_channels=self.model_params.get('n_classes', 2),
-                                                 in_channels=self.model_params.get('in_channels', 1)).to(self.device)
             # split dataset into train and validation
             if self.mask_list is None:
                 train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
@@ -216,6 +217,15 @@ class TrainingWorker(QThread):
             else: 
                 train_list, valid_list, train_mask, valid_mask = train_test_split(self.file_list, 
                                                                               test_size=0.2, random_state=42)
+            
+            n_classes = count_label_mask(train_list)
+            # define model that has be trained
+            # this is an example of unet model
+            model = dafne_network.DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
+                                                 n_levels=self.model_params.get('n_levels', 5),
+                                                 kernel_size=self.model_params.get('kernel_size', 3),
+                                                 out_channels=n_classes,
+                                                 in_channels=self.model_params.get('in_channels', 1)).to(self.device)
             
             train_dataset = DafneCacheDataset(image_files=train_list,
                                         mask_files=train_mask,
@@ -230,7 +240,7 @@ class TrainingWorker(QThread):
             optimizer = torch.optim.Adam(model.parameters(), lr=self.train_params.get('learning_rate', 0.001))
             
             # define loss criterion
-            criterion = DiceLoss(include_background=False, 
+            criterion = DiceLoss(include_background=True, 
                                  softmax=True,
                                  to_onehot_y=True)
 
