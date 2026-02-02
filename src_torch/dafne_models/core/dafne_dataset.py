@@ -107,7 +107,7 @@ class DafneCacheDataset(CacheDataset):
         add_transforms = []
 
         if self.augm_params.get('rotate'):
-            add_transforms.append(RandRotate90d(keys=['image', 'mask'], prob=0.5, spatial_axes=0))
+            add_transforms.append(RandRotate90d(keys=['image', 'mask'], prob=0.5, spatial_axes=(0, 1)))
         if self.augm_params.get('flip_x'):
             add_transforms.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=0))
         if self.augm_params.get('flip_y'):

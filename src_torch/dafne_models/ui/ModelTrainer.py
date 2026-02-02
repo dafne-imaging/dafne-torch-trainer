@@ -59,6 +59,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.train_settings_btn.clicked.connect(self.toggle_advanced_options_training)
         self.save_choose_Button.clicked.connect(self.select_save_path)
         self.augmentation_button.clicked.connect(self.open_augm_settings)
+        self.stop_btn.clicked.connect(self.stop_training)
 
         self.fit_Button.clicked.connect(self.start_training)
     
@@ -166,8 +167,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             QMessageBox.warning(self, 'Input Error', "No data loaded. Please select data first")
             return
 
-        self.fit_Button.setEnabled(False)
-        self.choose_Button.setEnabled(False)
+        self._status_btn(True)
         self.fit_output_box.setVisible(True)
 
         self.loss_history = []
@@ -217,8 +217,28 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.worker.sig_progress.connect(self.update_progress_bar)
         self.worker.sig_error.connect(self.handle_error)
         self.worker.sig_finished.connect(self.on_training_finished)
+        self.worker.sig_stopped.connect(self.on_training_stopped)
 
         self.worker.start()
+    
+    def stop_training(self):
+        if self.worker is not None and self.worker.isRunning():
+            self.stop_btn.setEnabled(False) # Evita doppi click
+            self.update_status_label("Stopping training. Please wait...")
+            self.worker.stop()
+
+    def _status_btn(self, active:bool):
+        widgets_to_toggle = [
+            self.choose_Button, self.save_choose_Button, 
+            self.advanced_button, self.train_settings_btn, 
+            self.augmentation_button, self.fit_Button, 
+            self.preprocess_Button, self.levels_spin,
+            self.epochs_spin, self.lr_spin, self.batch_spin
+        ]
+
+        for btn in widgets_to_toggle:
+            btn.setEnabled(not active)
+        self.stop_btn.setEnabled(active)
     
     def update_status_label(self, message): 
         self.progress_Label.setText(message)
@@ -230,6 +250,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_loss.clear()
         self.ax_loss.plot(self.loss_history, 'r-', label='Training Loss')
         self.ax_loss.plot(self.val_loss_history, 'b-', label='Validation Loss')
+        self.ax_loss.legend(loc='upper right')
         self.ax_loss.set_title(f'Loss: {loss:.4f}')
         self.ax_loss.grid(True, alpha=0.5)
 
@@ -249,10 +270,25 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         QtWidgets.QApplication.processEvents()
     
     def handle_error(self, err):
+        self._status_btn(False)
         QMessageBox.critical(self, "Error", f"Training is stopping:\n{err}")
         self._reset_ui_state()
     
+    def on_training_stopped(self):
+        self._status_btn(False)
+        self.progressBar.setValue(0)
+        self.progress_Label.setText("")
+        
+        self.fit_output_box.setVisible(False)
+        
+        self.loss_history = []
+        self.val_loss_history = []
+        self.ax_loss.clear()
+        self.ax_preview.clear()
+        
+    
     def on_training_finished(self):
+        self._status_btn(False)
         self.progressBar.setValue(100)
         self.progress_Label.setText('Training completed!')
         QMessageBox.information(self, 'Finished!', "The model was trained successfully")

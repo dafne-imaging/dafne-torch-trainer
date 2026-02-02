@@ -53,6 +53,8 @@ def pytorch_training_loop(model,
         epoch_loss = 0.0
         
         for batch in train_dataloader:
+            if check_stop is not None and check_stop():
+                break
             inputs = batch['image'].to(device)
             targets = batch['mask'].long().to(device)
             
@@ -70,6 +72,8 @@ def pytorch_training_loop(model,
         model.eval()
         with torch.no_grad():
             for batch in valid_dataloader:
+                if check_stop is not None and check_stop():
+                    break
                 val_image = batch['image'].to(device)
                 val_mask = batch['mask'].long().to(device)
                 val_output = model(val_image)
@@ -157,6 +161,9 @@ class TrainingWorker(QThread):
 
     # Send message when training ended
     sig_finished = pyqtSignal()
+
+    # stopped signal
+    sig_stopped = pyqtSignal()
 
     def __init__(self,
                  file_list:list,
@@ -285,7 +292,10 @@ class TrainingWorker(QThread):
                 self.sig_status.emit(f"Saving model to {self.save_path}...")
                 torch.save(model.state_dict(), self.save_path)
                 print(f'Model weights saved in {self.save_path}')'''
-            self.sig_finished.emit()
+            if not self.is_running:
+                self.sig_stopped.emit()
+            else:
+                self.sig_finished.emit()
             
         except Exception as e:
             traceback.print_exc()

@@ -189,7 +189,14 @@ class Ui_ModelTrainerUI(object):
         self.fit_Button.setObjectName("fit_Button")
         self.horizontalLayout_4.addWidget(self.fit_Button)
         self.verticalLayout.addLayout(self.horizontalLayout_4)
-
+        self.stop_btn = QtWidgets.QPushButton(ModelTrainerUI)
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.setObjectName("stop_btn")
+        self.stop_btn.setStyleSheet("""QPushButton {
+                background-color: #d9534f;
+                color: white;
+            }""")
+        self.horizontalLayout_4.addWidget(self.stop_btn)
         self.retranslateUi(ModelTrainerUI)
         QtCore.QMetaObject.connectSlotsByName(ModelTrainerUI)
 
@@ -202,6 +209,7 @@ class Ui_ModelTrainerUI(object):
         self.save_choose_Button.setText(_translate("ModelTrainerUI", "Choose..."))
         self.force_preprocess_check.setText(_translate("ModelTrainerUI", "Force preprocess"))
         self.advanced_button.setText(_translate("ModelTrainerUI", "Advanced settings"))
+        self.stop_btn.setText(_translate("ModelTrainerUI", "Stop training"))
         self.label_3.setText(_translate("ModelTrainerUI", "Levels: "))
         self.label_4.setText(_translate("ModelTrainerUI", " Conv. layers: "))
         self.label_5.setText(_translate("ModelTrainerUI", " Kernel size: "))
