@@ -30,7 +30,7 @@ class AugmentationDialog(QDialog):
             self.checkboxes[key] = cb
         
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.accepted.connect(self.accepted)
+        self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
 
         self.layout.addWidget(self.buttons)

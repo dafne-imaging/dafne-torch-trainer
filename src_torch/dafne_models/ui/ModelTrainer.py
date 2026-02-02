@@ -86,7 +86,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         dialog = AugmentationDialog(self, self.augm_params)
         if dialog.exec_() == QDialog.Accepted:
             self.augm_params = dialog.get_settings()
-            print(f"Augmentation updated: {self.aug_params}")
+            print(f"Augmentation updated: {self.augm_params}")
     
     def select_save_path(self):
         options = QFileDialog.Options()
