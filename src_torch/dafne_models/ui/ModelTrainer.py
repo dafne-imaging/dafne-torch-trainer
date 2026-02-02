@@ -4,13 +4,14 @@ import glob
 
 from ..core.training_worker import TrainingWorker
 from .ModelTrainer_Ui import Ui_ModelTrainerUI
+from .AugmentationDialog_Ui import AugmentationDialog
 
 from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtCore import QObject, QVariant
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QFileDialog, QSpinBox, QDoubleSpinBox, 
-    QTextEdit, QMessageBox, QGroupBox, QFormLayout
+    QTextEdit, QMessageBox, QGroupBox, QFormLayout, QDialog
 )
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -35,6 +36,11 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.image_paths = [] #path to images
         self.mask_paths = [] #path to masks
         self.train_params = {} #training params
+        self.augm_params = {'rotate':False,
+                            'flip_x':False,
+                            'flip_y':False,
+                            'zoom':False,
+                            'noise':False} #augm params
 
         # loss caches
         self.loss_history = []
@@ -52,6 +58,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.advanced_button.clicked.connect(self.toggle_advanced_options)
         self.train_settings_btn.clicked.connect(self.toggle_advanced_options_training)
         self.save_choose_Button.clicked.connect(self.select_save_path)
+        self.augmentation_button.clicked.connect(self.open_augm_settings)
 
         self.fit_Button.clicked.connect(self.start_training)
     
@@ -74,6 +81,12 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def toggle_advanced_option(self):
         is_visible = self.advanced_widget.isVisible()
         self.advanced_widget.setVisible(not is_visible)
+    
+    def open_augm_settings(self):
+        dialog = AugmentationDialog(self, self.augm_params)
+        if dialog.exec_() == QDialog.Accepted:
+            self.augm_params = dialog.get_settings()
+            print(f"Augmentation updated: {self.aug_params}")
     
     def select_save_path(self):
         options = QFileDialog.Options()
@@ -186,7 +199,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         train_params = {
             'epochs': epochs,
             'learning_rate': lr,
-            'batch_size': batch_size
+            'batch_size': batch_size,
+            'augmentation': self.augm_params
         }
 
         self.worker = TrainingWorker(

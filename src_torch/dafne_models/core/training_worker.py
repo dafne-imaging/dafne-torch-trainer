@@ -18,6 +18,8 @@ from sklearn.model_selection import train_test_split
 
 from ..models import dafne_network
 
+PATIENT = 20
+
 # definition of classic training loop
 def pytorch_training_loop(model, 
                           train_dataloader,
@@ -37,6 +39,7 @@ def pytorch_training_loop(model,
     
     dice_metric = DiceMetric(include_background=True, reduction='mean')
     best_val_dice_score = -float("inf")
+    counter = 0
 
     for epoch in range(epochs):
         
@@ -80,6 +83,7 @@ def pytorch_training_loop(model,
 
             if dice_score > best_val_dice_score:
                 best_val_dice_score = dice_score
+                counter = 0
             
                 if save_path:
                     try: 
@@ -88,32 +92,38 @@ def pytorch_training_loop(model,
                             on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
                     except Exception as e: 
                             print('Error during model saving {e}')
+            
+            elif early_stopping:
+                counter += 1       
+                if counter >= PATIENT:
+                    on_log(f'Training interrupted because of early stopping. Model saved in {save_path}') 
+                    break
                 
-            #take random valid image of batch from random valid dataloader
-            #sample_batch = next(iter(valid_dataloader))
-            dataset = valid_dataloader.dataset
-            idx = rd.randrange(len(dataset))
-            sample = dataset[idx]
-            val_image = sample['image'].to(device)
-            val_mask = sample['mask'].to(device)
+        #take random valid image of batch from random valid dataloader
+        #sample_batch = next(iter(valid_dataloader))
+        dataset = valid_dataloader.dataset
+        idx = rd.randrange(len(dataset))
+        sample = dataset[idx]
+        val_image = sample['image'].to(device)
+        val_mask = sample['mask'].to(device)
 
-            model.eval()
-            with torch.no_grad():
-                val_pred_out = model(val_image.unsqueeze(0))
-                val_pred = torch.argmax((val_pred_out), dim=1).float()
+        model.eval()
+        with torch.no_grad():
+            val_pred_out = model(val_image.unsqueeze(0))
+            val_pred = torch.argmax((val_pred_out), dim=1).float()
 
-                dims = val_image.shape
-                if len(dims)==4:
-                    img_np = val_image[0, :, dims[2]//2].cpu().numpy()
-                    pred_np = val_pred[0, :, dims[2]//2].cpu().numpy()
-                elif len(dims)==3:
-                    img_np = val_image[0].cpu().numpy()
-                    pred_np = val_pred[0].cpu().numpy()
+            dims = val_image.shape
+            if len(dims)==4:
+                img_np = val_image[0, :, dims[2]//2].cpu().numpy()
+                pred_np = val_pred[0, :, dims[2]//2].cpu().numpy()
+            elif len(dims)==3:
+                img_np = val_image[0].cpu().numpy()
+                pred_np = val_pred[0].cpu().numpy()
 
-                # send to GUI for each epoch, the current epoch, avg_loss and rand image
-                # and his model predicted mask
-                if on_epoch_end:    
-                    on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss)
+            # send to GUI for each epoch, the current epoch, avg_loss and rand image
+            # and his model predicted mask
+            if on_epoch_end:    
+                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss)
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
@@ -154,7 +164,8 @@ class TrainingWorker(QThread):
                  train_params:dict, 
                  mask_list:list=None,
                  save_path:str=None,
-                 early_stopping:bool=False):
+                 early_stopping:bool=False
+                 ):
         super().__init__()
         
         # inzialize worker parameters
@@ -232,13 +243,17 @@ class TrainingWorker(QThread):
                                                  kernel_size=self.model_params.get('kernel_size', 3),
                                                  out_channels=n_classes,
                                                  in_channels=self.model_params.get('in_channels', 1)).to(self.device)
-            
+            augm_params = self.train_params.get('augmentation', {})
             train_dataset = DafneCacheDataset(image_files=train_list,
                                         mask_files=train_mask,
-                                        cache_rate=1.0)
+                                        cache_rate=1.0, 
+                                        augm_params=augm_params,
+                                        train_transform=True)
             valid_dataset = DafneCacheDataset(image_files=valid_list,
                                         mask_files=valid_mask,
-                                        cache_rate=1.0)
+                                        cache_rate=1.0,
+                                        augm_params={},
+                                        train_transform=False)
             
             # batch size must be choose by user before train
             train_dataloader = DataLoader(train_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=True)
@@ -263,7 +278,7 @@ class TrainingWorker(QThread):
                 on_epoch_end=self._callback_epoch_end,
                 check_stop=self._callback_check_stop,
                 on_log=self._callback_log,
-                early_stopping=self.early_stopping
+                early_stopping=self.early_stopping,
             )
 
             '''if self.save_path: 

@@ -8,7 +8,11 @@ from monai.transforms import (
     MapTransform,
     LoadImage,
     ToTensord,
-    Resized
+    Resized,
+    RandRotate90d,
+    RandFlipd,
+    RandZoomd, 
+    RandGaussianNoised
     )
 
 class MapTransformLoadData(MapTransform):
@@ -60,7 +64,12 @@ class DafneCacheDataset(CacheDataset):
         Dataset is defined a CacheDaset RAM caching.
     '''
     
-    def __init__(self, image_files:list, transform=None, cache_rate=1.0, mask_files:list=None):
+    def __init__(self, 
+                 image_files:list, 
+                 cache_rate=1.0, 
+                 mask_files:list=None,
+                 augm_params:dict=None,
+                 train_transform:bool=True):
         '''
         Args: 
             image_files (list): data path to anatomical images (.nii or .npz images)
@@ -68,7 +77,8 @@ class DafneCacheDataset(CacheDataset):
         '''
         self.image_files = image_files
         self.mask_files = mask_files
-
+        self.augm_params = augm_params if augm_params is not None else {}
+        self.train_transform = train_transform
 
         if self.mask_files is not None and len(self.mask_files) > 0:
             if len(self.image_files) != len(self.mask_files):
@@ -82,22 +92,37 @@ class DafneCacheDataset(CacheDataset):
             data_dict = [{'file_path':path} for path in image_files]
             keys_to_load = ['file_path']
 
-        if transform is None:
-            # at the moment basic transforms
-            self.transform = Compose([
-                MapTransformLoadData(keys=keys_to_load),
-                EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
-                ScaleIntensityd(keys=['image']),
-                ToTensord(keys=['image', 'mask']),
-                Resized(
-                    keys=['image', 'mask'], 
-                    spatial_size=(256, 256), 
-                    mode=['bilinear', 'nearest'] 
-                )
-            ])
-        else: 
-            self.transform = transform
-        
+        base_transforms = [
+            MapTransformLoadData(keys=keys_to_load),
+            EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
+            ScaleIntensityd(keys=['image']),
+            ToTensord(keys=['image', 'mask']),
+            Resized(
+                keys=['image', 'mask'], 
+                spatial_size=(256, 256), 
+                mode=['bilinear', 'nearest'] 
+            )
+        ]
+
+        add_transforms = []
+
+        if self.augm_params.get('rotate'):
+            add_transforms.append(RandRotate90d(keys=['image', 'mask'], prob=0.5, spatial_axes=0))
+        if self.augm_params.get('flip_x'):
+            add_transforms.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=0))
+        if self.augm_params.get('flip_y'):
+            add_transforms.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=1))
+        if self.augm_params.get('zoom'):
+            add_transforms.append(RandZoomd(keys=['image', 'mask'], prob=0.5, min_zoom=0.9, max_zoom=1.1, mode=['bilinear', 'nearest']))
+        if self.augm_params.get('noise'):
+            add_transforms.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
+
+        if self.train_transform and self.augm_params is not None:
+            transform = base_transforms + add_transforms
+            self.transform = Compose(transform)
+        elif not self.train_transform or self.augm_params is None:
+            self.transform = Compose(base_transforms)
+
         super().__init__(data=data_dict, transform=self.transform, cache_rate=cache_rate)
 
     def __len__(self):
@@ -128,8 +153,7 @@ if __name__ == "__main__":
 
     try:
         print("\n--- ANALISI PRIMO CAMPIONE ---")
-        first_sample = dataset[76] # Chiama __getitem__ e applica le trasformate
-        
+        first_sample = dataset[76]
         img = first_sample['image']
         mask = first_sample['mask']
         print(np.unique(mask))
@@ -145,6 +169,6 @@ if __name__ == "__main__":
         plt.show()
 
     except Exception as e:
-        print(f"❌ Errore durante il caricamento del campione: {e}")
+        print(f"Error: {e}")
         import traceback
         traceback.print_exc()

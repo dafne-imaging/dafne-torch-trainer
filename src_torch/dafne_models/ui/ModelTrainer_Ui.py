@@ -149,6 +149,8 @@ class Ui_ModelTrainerUI(object):
         self.early_stopping_check.setObjectName("early_stopping_check")
         self.horizontalLayout_train.addWidget(self.early_stopping_check)
         self.horizontalLayout_train_container.addWidget(self.train_settings_widget)
+        self.augmentation_button = QtWidgets.QPushButton("Augmentation")
+        self.horizontalLayout_train_container.addWidget(self.augmentation_button)
         self.verticalLayout.addLayout(self.horizontalLayout_train_container)
         spacerItem_train = QtWidgets.QSpacerItem(40, 20, QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Minimum)
         self.progressBar = QtWidgets.QProgressBar(ModelTrainerUI)
