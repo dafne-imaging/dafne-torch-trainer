@@ -113,16 +113,16 @@ def pytorch_training_loop(model,
 
         model.eval()
         with torch.no_grad():
-            val_pred_out = model(val_image.unsqueeze(0))
+            val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
             val_pred = torch.argmax((val_pred_out), dim=1).float()
 
             dims = val_image.shape
-            if len(dims)==4:
-                img_np = val_image[0, :, dims[2]//2].cpu().numpy()
-                pred_np = val_pred[0, :, dims[2]//2].cpu().numpy()
-            elif len(dims)==3:
-                img_np = val_image[0].cpu().numpy()
-                pred_np = val_pred[0].cpu().numpy()
+            if len(dims)==5: # 3D image [B, C, H, W, D]
+                img_np = val_image[0, 0, :, :, dims[4]//2].cpu().numpy()
+                pred_np = val_pred[0, 0, :, :, dims[4]//2].cpu().numpy()
+            elif len(dims)==3: # 2D images [B, C, H, W]
+                img_np = val_image[0, 0, :,  :].cpu().numpy()
+                pred_np = val_pred[0, 0, :, :].cpu().numpy()
 
             # send to GUI for each epoch, the current epoch, avg_loss and rand image
             # and his model predicted mask
@@ -131,13 +131,30 @@ def pytorch_training_loop(model,
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
-def count_label_mask(data_list:list):
+def count_label_mask(data_list: list, spatial_dims: int = 2):
     # count number of labels in train masks
     labels = set()
-    for d in data_list:
-        mask_data = np.load(d)['arr_1']
-        count = np.unique(mask_data)
-        labels.update(np.unique(count))
+    files_to_check = []
+
+    if spatial_dims == 3:
+        for volume in data_list:
+            if isinstance(volume, list):
+                files_to_check.extend(volume)
+            else:
+                files_to_check.append(volume)
+    else:
+        files_to_check = data_list
+
+    for file_path in files_to_check: 
+        try:
+            with np.load(file_path) as npz_data:
+                if 'arr_1' in npz_data:
+                    mask = npz_data['arr_1']
+                    labels.update(np.unique(mask))
+        except Exception as e:
+            continue
+            
+    if len(labels) == 0: return 2
     return len(labels)
 
 class TrainingWorker(QThread):
@@ -242,7 +259,7 @@ class TrainingWorker(QThread):
                 train_list, valid_list, train_mask, valid_mask = train_test_split(self.file_list, 
                                                                               test_size=0.2, random_state=42)
             
-            n_classes = count_label_mask(train_list)
+            n_classes = count_label_mask(train_list, spatial_dims=self.model_params.get('spatial_dims', 2))
             # define model that has be trained
             # this is an example of unet model
             model = dafne_network.DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
@@ -255,12 +272,14 @@ class TrainingWorker(QThread):
                                         mask_files=train_mask,
                                         cache_rate=1.0, 
                                         augm_params=augm_params,
-                                        train_transform=True)
+                                        train_transform=True,
+                                        spatial_dims=self.model_params.get('spatial_dims', 2))
             valid_dataset = DafneCacheDataset(image_files=valid_list,
                                         mask_files=valid_mask,
                                         cache_rate=1.0,
                                         augm_params={},
-                                        train_transform=False)
+                                        train_transform=False,
+                                        spatial_dims=self.model_params.get('spatial_dims', 2))
             
             # batch size must be choose by user before train
             train_dataloader = DataLoader(train_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=True)

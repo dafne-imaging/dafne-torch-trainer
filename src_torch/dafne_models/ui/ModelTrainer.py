@@ -116,8 +116,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         
         self.location_Text.setText(folder_path)
         extensions = ['.npz', '.nii', '.nii.gz', '.dcm']
-        found_files = self._scan_directory_folds(folder_path, extensions)
 
+        found_files = self._scan_group_files(folder_path, extensions) if self.model_3d_check.isChecked() else self._scan_directory_folds(folder_path, extensions)
         if not found_files:
             QMessageBox.warning(self, "No data found", f'Folder selected does not contain valid extension {extensions}')
             self.image_paths = []
@@ -129,7 +129,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.fit_Button.setEnabled(True)
 
-        QMessageBox.information(self, "Data loaded successfully", f"Founded {len(found_files)}")
+        QMessageBox.information(self, "Data loaded successfully", f"Found {len(found_files)} data")
 
     def _scan_directory(self, folder_path, extensions):
         found_files = []
@@ -144,6 +144,45 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         except Exception as e:
             print(f"Error scanning directory {folder_path}: {e}")
             return []
+    
+    def _scan_group_files(self, folder_path, extension):
+        '''
+        Scan input folder by the user 
+        
+        Example of input folder: 
+        - .npz_folder
+            - patient 1
+                - slice 1
+                - slice 2 
+                -   ...
+                - slice n
+            - patient 2
+                - slice 1
+                - slice 2
+                -  ...
+                - slice n
+            -      ...
+            - patient n
+                - slice 1
+                - slice 2
+                -  ...
+                - slice n
+        '''
+
+        found_3d_volume = {}
+        try:
+            for root, _, files in os.walk(folder_path):
+                valid_files = [file for file in files if any(file.endswith(ext) for ext in extension)]
+                valid_files.sort()
+            
+                if valid_files:
+                    full_paths = [os.path.join(root, valid_file) for valid_file in valid_files]
+                    found_3d_volume[root] = full_paths
+
+        except Exception as e:
+            print(f"Error during 3D scan: {e}")
+        
+        return list(found_3d_volume.values())
     
     def _scan_directory_folds(self, folder_path, extensions):
         found_files = []
@@ -186,9 +225,10 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         epochs = self.epochs_spin.value()
 
         early_stopping = self.early_stopping_check.isChecked()
+        spatial_dims = self.model_3d_check.isChecked()
 
         model_params = {
-            'spatial_dims': 2,
+            'spatial_dims': 3 if spatial_dims else 2,
             'n_levels': n_levels,
             'kernel_size': kernel_size,
             'n_classes': 2,

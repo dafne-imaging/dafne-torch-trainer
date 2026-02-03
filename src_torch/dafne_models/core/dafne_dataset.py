@@ -40,21 +40,40 @@ class MapTransformLoadData(MapTransform):
             filepath = d[key]
 
             try: 
-                if filepath.endswith('.npz'):
-                    try:
-                        with np.load(filepath) as npz_data:
-                            d['image'] = npz_data['arr_0'].astype(np.float32)
-                            d['mask'] = npz_data['arr_1'].astype(np.float32)
-                    except Exception as e:
-                        print(f'Error occured during .npz reading')
-
-                elif filepath.endswith(('.nii', '.dcm', '.nii.gz')):
-                    try:
+                if isinstance(filepath, list):
+                    if filepath[0].endswith('.npz'):
+                        slices_list = []
+                        masks_list = []
+                        for slice in filepath: 
+                            with np.load(slice) as npz_data: 
+                                image = npz_data['arr_0'].astype(np.float32)
+                                mask = npz_data['arr_1'].astype(np.float32)
+                                slices_list.append(image)
+                                masks_list.append(mask)
+                        d['image'] = np.stack(slices_list, axis=0).astype(np.float32)
+                        d['mask'] = np.stack(masks_list, axis=0).astype(np.float32)
+                    else: 
                         d[key] = self.monai_loader(filepath).astype(np.float32)
-                    except Exception as e: 
-                        print(f'Error occurred during loading {filepath}: {e}')
             except Exception as e:
-                print(f'Image format not supported: {e}')
+                print(f'Error during stacking slices: {e}')
+
+            else:         
+                try: 
+                    if filepath.endswith('.npz'):
+                        try:
+                            with np.load(filepath) as npz_data:
+                                d['image'] = npz_data['arr_0'].astype(np.float32)
+                                d['mask'] = npz_data['arr_1'].astype(np.float32)
+                        except Exception as e:
+                            print(f'Error occured during .npz reading')
+
+                    elif filepath.endswith(('.nii', '.dcm', '.nii.gz')):
+                        try:
+                            d[key] = self.monai_loader(filepath).astype(np.float32)
+                        except Exception as e: 
+                            print(f'Error occurred during loading {filepath}: {e}')
+                except Exception as e:
+                    print(f'Image format not supported: {e}')
         return d
 
 
@@ -69,7 +88,8 @@ class DafneCacheDataset(CacheDataset):
                  cache_rate=1.0, 
                  mask_files:list=None,
                  augm_params:dict=None,
-                 train_transform:bool=True):
+                 train_transform:bool=True,
+                 spatial_dims:int=2):
         '''
         Args: 
             image_files (list): data path to anatomical images (.nii or .npz images)
@@ -79,6 +99,7 @@ class DafneCacheDataset(CacheDataset):
         self.mask_files = mask_files
         self.augm_params = augm_params if augm_params is not None else {}
         self.train_transform = train_transform
+        self.spatial_dims = spatial_dims
 
         if self.mask_files is not None and len(self.mask_files) > 0:
             if len(self.image_files) != len(self.mask_files):
@@ -91,6 +112,11 @@ class DafneCacheDataset(CacheDataset):
             # create a dict of path
             data_dict = [{'file_path':path} for path in image_files]
             keys_to_load = ['file_path']
+        
+        if self.spatial_dims == 3: 
+            spatial_size = (256, 256, -1)
+        else:
+            spatial_size = (256, 256)
 
         base_transforms = [
             MapTransformLoadData(keys=keys_to_load),
