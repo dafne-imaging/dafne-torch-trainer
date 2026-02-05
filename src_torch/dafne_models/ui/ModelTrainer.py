@@ -115,7 +115,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             return
         
         self.location_Text.setText(folder_path)
-        extensions = ['.npz', '.nii', '.nii.gz', '.dcm']
+        extensions = ['.npz']
 
         found_files = self._scan_group_files(folder_path, extensions) if self.model_3d_check.isChecked() else self._scan_directory_folds(folder_path, extensions)
         if not found_files:

@@ -8,9 +8,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from monai.data import DataLoader
+from monai.data import DataLoader, decollate_batch
+from monai.data.utils import pad_list_data_collate
 from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
+from monai.inferers import sliding_window_inference
+from monai.transforms import Compose, AsDiscrete
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -28,11 +31,13 @@ def pytorch_training_loop(model,
                           criterion,
                           device,
                           epochs,
+                          spatial_dims:int=2,
+                          n_classes:int=2,
+                          early_stopping:bool=False,
                           save_path:str=None,
                           on_epoch_end=None,
                           check_stop=None,
-                          on_log=None, 
-                          early_stopping:bool=False
+                          on_log=None,
                           ):
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
@@ -66,19 +71,37 @@ def pytorch_training_loop(model,
 
             epoch_loss += loss.item()
         
+        if check_stop is not None and check_stop():
+            break
+        
         avg_loss = epoch_loss / len(train_dataloader)
 
         val_loss = 0.0
         model.eval()
+
+        post_pred = Compose([
+            AsDiscrete(argmax=True, to_onehot=n_classes)
+        ])
+        post_label = Compose([
+            AsDiscrete(to_onehot=n_classes)
+        ])
+
         with torch.no_grad():
             for batch in valid_dataloader:
                 if check_stop is not None and check_stop():
                     break
                 val_image = batch['image'].to(device)
                 val_mask = batch['mask'].long().to(device)
-                val_output = model(val_image)
-                val_pred = torch.argmax(val_output, dim=1)
-                dice_metric(y_pred=val_pred.unsqueeze(1), y=val_mask)
+                if spatial_dims == 3: 
+                    val_output = valid_on_batch_3d(val_image, model) # return original tensor shape
+                else:
+                    val_output = model(val_image)
+                val_output_decollate = decollate_batch(val_output)
+                val_label_decollate = decollate_batch(val_mask)
+                val_preds = [post_pred(i) for i in val_output_decollate]
+                val_masks = [post_label(i) for i in val_label_decollate]
+                
+                dice_metric(y_pred=val_preds, y=val_masks)
                 val_loss += criterion(val_output, val_mask).item()
             dice_score = dice_metric.aggregate().item()
             avg_val_loss = val_loss / len(valid_dataloader)
@@ -104,7 +127,6 @@ def pytorch_training_loop(model,
                     break
                 
         #take random valid image of batch from random valid dataloader
-        #sample_batch = next(iter(valid_dataloader))
         dataset = valid_dataloader.dataset
         idx = rd.randrange(len(dataset))
         sample = dataset[idx]
@@ -113,16 +135,19 @@ def pytorch_training_loop(model,
 
         model.eval()
         with torch.no_grad():
-            val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
+            if spatial_dims == 3: 
+                val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model)
+            else: 
+                val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
             val_pred = torch.argmax((val_pred_out), dim=1).float()
 
             dims = val_image.shape
-            if len(dims)==5: # 3D image [B, C, H, W, D]
-                img_np = val_image[0, 0, :, :, dims[4]//2].cpu().numpy()
-                pred_np = val_pred[0, 0, :, :, dims[4]//2].cpu().numpy()
+            if len(dims)==4: # 3D volume [B, C, H, W, D]
+                img_np = val_image[0, dims[3]//2, :, :].cpu().numpy()
+                pred_np = val_pred[0, dims[3]//2, :, :].cpu().numpy()
             elif len(dims)==3: # 2D images [B, C, H, W]
-                img_np = val_image[0, 0, :,  :].cpu().numpy()
-                pred_np = val_pred[0, 0, :, :].cpu().numpy()
+                img_np = val_image[0].cpu().numpy()
+                pred_np = val_pred[0].cpu().numpy()
 
             # send to GUI for each epoch, the current epoch, avg_loss and rand image
             # and his model predicted mask
@@ -131,31 +156,43 @@ def pytorch_training_loop(model,
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
-def count_label_mask(data_list: list, spatial_dims: int = 2):
-    # count number of labels in train masks
-    labels = set()
-    files_to_check = []
 
-    if spatial_dims == 3:
-        for volume in data_list:
-            if isinstance(volume, list):
-                files_to_check.extend(volume)
-            else:
-                files_to_check.append(volume)
-    else:
-        files_to_check = data_list
+def valid_on_batch_3d(image_batch, model):
+    '''
+    Methods for validation on 3D batches with sliding inference
+    
+    :param image_batch: current image batch
+    :param model: model for patch prediction
+    '''
+    return sliding_window_inference(
+        inputs=image_batch,
+        roi_size=(32, 96, 96),
+        sw_batch_size=4,
+        overlap=0.25,
+        predictor=model
+    )
 
-    for file_path in files_to_check: 
+    
+def count_label_mask(data_list: list):
+    max_masks_found = 0
+    limit = min(len(data_list), 50)
+    
+    for i in range(limit):
+        filepath = data_list[i]
         try:
-            with np.load(file_path) as npz_data:
-                if 'arr_1' in npz_data:
-                    mask = npz_data['arr_1']
-                    labels.update(np.unique(mask))
-        except Exception as e:
+            # mmap_mode='r' legge solo l'header del file
+            with np.load(filepath, mmap_mode='r') as npz:
+                keys = list(npz.keys())
+                # Conta quante chiavi iniziano con 'mask'
+                n_masks = len([k for k in keys if k.startswith('mask')])
+                
+                if n_masks > max_masks_found:
+                    max_masks_found = n_masks
+        except Exception:
             continue
-            
-    if len(labels) == 0: return 2
-    return len(labels)
+    
+    total_classes = max_masks_found + 1
+    return max(2, total_classes)
 
 class TrainingWorker(QThread):
 
@@ -247,43 +284,50 @@ class TrainingWorker(QThread):
         
         try:
             from .dafne_dataset import DafneCacheDataset
+            from .dafne_dataset_v2 import DafneDataset
 
             self.sig_status.emit(f"Training initialization on: {self.device} device")
             self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...)")
             
             # split dataset into train and validation
-            if self.mask_list is None:
-                train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
-                train_mask, valid_mask = None, None
-            else: 
-                train_list, valid_list, train_mask, valid_mask = train_test_split(self.file_list, 
-                                                                              test_size=0.2, random_state=42)
+            train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
             
-            n_classes = count_label_mask(train_list, spatial_dims=self.model_params.get('spatial_dims', 2))
+            #n_classes = count_label_mask(train_list, spatial_dims=self.model_params.get('spatial_dims', 2))
             # define model that has be trained
             # this is an example of unet model
+            augm_params = self.train_params.get('augmentation', {})
+
+            n_classes = count_label_mask(data_list=self.file_list)
             model = dafne_network.DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
                                                  n_levels=self.model_params.get('n_levels', 5),
                                                  kernel_size=self.model_params.get('kernel_size', 3),
                                                  out_channels=n_classes,
                                                  in_channels=self.model_params.get('in_channels', 1)).to(self.device)
-            augm_params = self.train_params.get('augmentation', {})
-            train_dataset = DafneCacheDataset(image_files=train_list,
-                                        mask_files=train_mask,
-                                        cache_rate=1.0, 
+            
+            train_dataset = DafneDataset(data_files=train_list,
                                         augm_params=augm_params,
                                         train_transform=True,
-                                        spatial_dims=self.model_params.get('spatial_dims', 2))
-            valid_dataset = DafneCacheDataset(image_files=valid_list,
-                                        mask_files=valid_mask,
-                                        cache_rate=1.0,
+                                        spatial_dims=self.model_params.get('spatial_dims', 2),
+                                        )
+            valid_dataset = DafneDataset(data_files=valid_list,
                                         augm_params={},
                                         train_transform=False,
-                                        spatial_dims=self.model_params.get('spatial_dims', 2))
+                                        spatial_dims=self.model_params.get('spatial_dims', 2),
+                                        )
             
             # batch size must be choose by user before train
-            train_dataloader = DataLoader(train_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=True)
-            valid_dataloader = DataLoader(valid_dataset, num_workers=0, batch_size=self.train_params.get('batch_size', 2), shuffle=False)
+            train_dataloader = DataLoader(train_dataset, 
+                                          num_workers=8, 
+                                          batch_size=self.train_params.get('batch_size', 2), 
+                                          shuffle=True,
+                                          collate_fn=pad_list_data_collate)
+            valid_bs = self.train_params.get('batch_size', 2) if self.model_params.get('spatial_dims') == 2 else 1
+            valid_dataloader = DataLoader(valid_dataset, 
+                                          num_workers=8, 
+                                          batch_size=valid_bs, 
+                                          shuffle=False,
+                                          collate_fn=pad_list_data_collate)
+            
             optimizer = torch.optim.Adam(model.parameters(), lr=self.train_params.get('learning_rate', 0.001))
             
             # define loss criterion
@@ -305,6 +349,7 @@ class TrainingWorker(QThread):
                 check_stop=self._callback_check_stop,
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
+                n_classes=n_classes
             )
 
             '''if self.save_path: 

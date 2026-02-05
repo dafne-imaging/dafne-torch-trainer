@@ -43,11 +43,17 @@ if __name__ == "__main__":
         # Test Full UNet
         model_full = DafneUnetModel(spatial_dims=2, in_channels=1, out_channels=2, n_levels=5)
         print("DafneUnetModel correctly instantiated.")
-        
+        count = 0
+        # Calcoliamo la profondità massima analizzando tutti i nomi
+        for name, layer in model_full.named_modules():
+            if isinstance(layer, nn.Conv2d):
+                print(layer, name)
+
+        #print(model_full)
         # Test Dummy Input
-        x = torch.randn(1, 1, 128, 128) # Batch=1, Canale=1, H=128, W=128
-        y = model_full(x)
-        print(f"Forward pass OK. Output shape: {y.shape}")
+        #x = torch.randn(1, 1, 128, 128) # Batch=1, Canale=1, H=128, W=128
+        #y = model_full(x)
+        #print(f"Forward pass OK. Output shape: {y.shape}")
         
     except Exception as e:
         print(f"Critical error: {e}")
