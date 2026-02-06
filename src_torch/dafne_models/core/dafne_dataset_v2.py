@@ -140,7 +140,7 @@ class DafneDataset(Dataset):
             pipeline.append( 
                 RandCropByPosNegLabeld(
                     keys=['image', 'mask'], label_key='mask',
-                    spatial_size=(15, 96, 96), # Patch 3D
+                    spatial_size=(16, 96, 96), # Patch 3D
                     pos=1, neg=1, num_samples=4,
                     image_key='image', image_threshold=0
                 )

@@ -62,7 +62,6 @@ def pytorch_training_loop(model,
                 break
             inputs = batch['image'].to(device)
             targets = batch['mask'].long().to(device)
-            
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -142,10 +141,10 @@ def pytorch_training_loop(model,
             val_pred = torch.argmax((val_pred_out), dim=1).float()
 
             dims = val_image.shape
-            if len(dims)==4: # 3D volume [B, C, H, W, D]
-                img_np = val_image[0, dims[3]//2, :, :].cpu().numpy()
-                pred_np = val_pred[0, dims[3]//2, :, :].cpu().numpy()
-            elif len(dims)==3: # 2D images [B, C, H, W]
+            if len(dims)==4: # 3D volume [B, H, W, D] - no C because of argmax
+                img_np = val_image[0, dims[1]//2, :, :].cpu().numpy()
+                pred_np = val_pred[0, dims[1]//2, :, :].cpu().numpy()
+            elif len(dims)==3: # 2D images [B, H, W] - no C because of argmax
                 img_np = val_image[0].cpu().numpy()
                 pred_np = val_pred[0].cpu().numpy()
 
@@ -166,7 +165,7 @@ def valid_on_batch_3d(image_batch, model):
     '''
     return sliding_window_inference(
         inputs=image_batch,
-        roi_size=(32, 96, 96),
+        roi_size=(16, 96, 96),
         sw_batch_size=4,
         overlap=0.25,
         predictor=model
@@ -349,7 +348,8 @@ class TrainingWorker(QThread):
                 check_stop=self._callback_check_stop,
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
-                n_classes=n_classes
+                n_classes=n_classes,
+                spatial_dims=self.model_params.get('spatial_dims', 2)
             )
 
             '''if self.save_path: 
