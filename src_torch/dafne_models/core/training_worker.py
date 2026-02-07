@@ -19,6 +19,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from sklearn.model_selection import train_test_split
 
+from .utils import count_label_mask, get_median_spacing
 from ..models import dafne_network
 
 PATIENT = 20
@@ -171,27 +172,6 @@ def valid_on_batch_3d(image_batch, model):
         predictor=model
     )
 
-    
-def count_label_mask(data_list: list):
-    max_masks_found = 0
-    limit = min(len(data_list), 50)
-    
-    for i in range(limit):
-        filepath = data_list[i]
-        try:
-            # mmap_mode='r' legge solo l'header del file
-            with np.load(filepath, mmap_mode='r') as npz:
-                keys = list(npz.keys())
-                # Conta quante chiavi iniziano con 'mask'
-                n_masks = len([k for k in keys if k.startswith('mask')])
-                
-                if n_masks > max_masks_found:
-                    max_masks_found = n_masks
-        except Exception:
-            continue
-    
-    total_classes = max_masks_found + 1
-    return max(2, total_classes)
 
 class TrainingWorker(QThread):
 
@@ -282,8 +262,7 @@ class TrainingWorker(QThread):
         '''
         
         try:
-            from .dafne_dataset import DafneCacheDataset
-            from .dafne_dataset_v2 import DafneDataset
+            from .dafne_dataset import DafneDataset
 
             self.sig_status.emit(f"Training initialization on: {self.device} device")
             self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...)")
@@ -294,7 +273,9 @@ class TrainingWorker(QThread):
             #n_classes = count_label_mask(train_list, spatial_dims=self.model_params.get('spatial_dims', 2))
             # define model that has be trained
             # this is an example of unet model
+            spatial_dims = self.model_params.get('spatial_dims', 2)
             augm_params = self.train_params.get('augmentation', {})
+            median_spacing = get_median_spacing(self.file_list, spatial_dims)
 
             n_classes = count_label_mask(data_list=self.file_list)
             model = dafne_network.DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
@@ -306,12 +287,12 @@ class TrainingWorker(QThread):
             train_dataset = DafneDataset(data_files=train_list,
                                         augm_params=augm_params,
                                         train_transform=True,
-                                        spatial_dims=self.model_params.get('spatial_dims', 2),
+                                        spatial_dims=spatial_dims,
                                         )
             valid_dataset = DafneDataset(data_files=valid_list,
                                         augm_params={},
                                         train_transform=False,
-                                        spatial_dims=self.model_params.get('spatial_dims', 2),
+                                        spatial_dims=spatial_dims,
                                         )
             
             # batch size must be choose by user before train
@@ -349,7 +330,7 @@ class TrainingWorker(QThread):
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
                 n_classes=n_classes,
-                spatial_dims=self.model_params.get('spatial_dims', 2)
+                spatial_dims=spatial_dims
             )
 
             '''if self.save_path: 
