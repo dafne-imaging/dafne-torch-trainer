@@ -137,10 +137,18 @@ class DafneDataset(Dataset):
         pipeline = [
             MapTransformLoadData(keys=self.keys_to_load, spatial_dims=3),
             EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
-            PreprocessAnisotropy(keys=['image', 'mask'], target_spacing=self.target_spacing)
         ]
 
+        if not self.train_transform:
+            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
+                                                 target_spacing=self.target_spacing,
+                                                 model_mode=None))
+
         if self.train_transform:
+            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
+                                                 target_spacing=self.target_spacing,
+                                                 model_mode='train'))
+            
             pipeline.append( 
                 RandCropByPosNegLabeld(
                     keys=['image', 'mask'], label_key='mask',
@@ -167,11 +175,18 @@ class DafneDataset(Dataset):
     def _transform_2d_data(self):
         pipeline = [
             MapTransformLoadData(keys=self.keys_to_load, spatial_dims=2),
-            EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
-            PreprocessAnisotropy(keys=['image', 'mask'], target_spacing=self.target_spacing)
+            EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel')
         ]
+
+        if not self.train_transform:
+            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
+                                                 target_spacing=self.target_spacing,
+                                                 model_mode=None))
         
         if self.train_transform:
+            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
+                                                 target_spacing=self.target_spacing,
+                                                 model_mode='train'))
             if self.augm_params.get('rotate'):
                 pipeline.append(RandRotate90d(keys=['image', 'mask'], prob=0.5, spatial_axes=(0,1)))
             if self.augm_params.get('flip_x'):

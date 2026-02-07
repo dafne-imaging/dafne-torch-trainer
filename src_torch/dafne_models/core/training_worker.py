@@ -288,11 +288,13 @@ class TrainingWorker(QThread):
                                         augm_params=augm_params,
                                         train_transform=True,
                                         spatial_dims=spatial_dims,
+                                        median_spacing = median_spacing
                                         )
             valid_dataset = DafneDataset(data_files=valid_list,
                                         augm_params={},
                                         train_transform=False,
                                         spatial_dims=spatial_dims,
+                                        median_spacing = median_spacing
                                         )
             
             # batch size must be choose by user before train
