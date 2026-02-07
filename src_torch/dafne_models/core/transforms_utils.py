@@ -10,7 +10,8 @@ from monai.transforms.utils import generate_spatial_bounding_box
 from monai.transforms import (MapTransform, 
                             CropForegroundd, 
                             NormalizeIntensity, 
-                            SpatialCrop)
+                            SpatialCrop,
+                            DivisiblePadd)
 
 
 def resample_image(image, shape, anisotrophy_flag):
@@ -175,6 +176,8 @@ class PreprocessAnisotropy(MapTransform):
             d["original_shape"] = np.array(image.shape[1:])
             box_start, box_end = generate_spatial_bounding_box(image, allow_smaller=True)
             image = SpatialCrop(roi_start=box_start, roi_end=box_end)(image)
+            if has_mask:
+                label = SpatialCrop(roi_start=box_start, roi_end=box_end)(label)
             d["bbox"] = np.vstack([box_start, box_end])
             d["crop_shape"] = np.array(image.shape[1:])
 
@@ -222,7 +225,7 @@ class PreprocessAnisotropy(MapTransform):
                             clip=True,
                             anti_aliasing=False
                         )
-                        resized_channel_mask.append(mask_res)
+                        resized_channel_mask.append(mask_res.astype(np.uint8))
                     label = np.stack(resized_channel_mask, axis=0)
 
         d["resample_flag"] = resample_flag

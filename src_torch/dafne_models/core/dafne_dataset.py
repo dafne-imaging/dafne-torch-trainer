@@ -17,8 +17,7 @@ from monai.transforms import (
     RandZoomd, 
     RandGaussianNoised,
     RandCropByPosNegLabeld,
-    Spacingd,
-    CropForegroundd
+    DivisiblePadd
     )
 
 from dafne_models.core.transforms_utils import PreprocessAnisotropy
@@ -56,7 +55,7 @@ class MapTransformLoadData(MapTransform):
                     mask_keys = sorted(k for k in npz_data.keys() if k.startswith('mask'))
                     img = npz_data['data'].astype(np.float32)
                     img = np.ascontiguousarray(np.moveaxis(img, -1, 0))
-                    mask = np.zeros_like(img, dtype=np.float32)
+                    mask = np.zeros_like(img, dtype=np.uint8)
                     current_res = npz_data['resolution']
 
                     for i, k in enumerate(mask_keys):
@@ -170,6 +169,8 @@ class DafneDataset(Dataset):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
 
         pipeline.append(ToTensord(keys=['image', 'mask']))
+        #pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32))
+
         return pipeline
     
     def _transform_2d_data(self):
@@ -199,6 +200,8 @@ class DafneDataset(Dataset):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
         
         pipeline.append(ToTensord(keys=['image', 'mask']))
+        pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32))
+
         return pipeline
 
 

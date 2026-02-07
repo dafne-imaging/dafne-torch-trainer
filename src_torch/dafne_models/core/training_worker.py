@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.optim as optim
 
 from monai.data import DataLoader, decollate_batch
-from monai.data.utils import pad_list_data_collate
+from monai.data.utils import pad_list_data_collate, list_data_collate
 from monai.losses import DiceLoss
 from monai.metrics import DiceMetric
 from monai.inferers import sliding_window_inference
@@ -63,6 +63,7 @@ def pytorch_training_loop(model,
                 break
             inputs = batch['image'].to(device)
             targets = batch['mask'].long().to(device)
+            print(f'train input shape: {inputs.shape}')
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -92,6 +93,7 @@ def pytorch_training_loop(model,
                     break
                 val_image = batch['image'].to(device)
                 val_mask = batch['mask'].long().to(device)
+                print(f'val input shape: {val_image.shape}, val mask shape: {val_mask.shape}')
                 if spatial_dims == 3: 
                     val_output = valid_on_batch_3d(val_image, model) # return original tensor shape
                 else:
@@ -288,13 +290,13 @@ class TrainingWorker(QThread):
                                         augm_params=augm_params,
                                         train_transform=True,
                                         spatial_dims=spatial_dims,
-                                        median_spacing = median_spacing
+                                        target_spacing = median_spacing
                                         )
             valid_dataset = DafneDataset(data_files=valid_list,
                                         augm_params={},
                                         train_transform=False,
                                         spatial_dims=spatial_dims,
-                                        median_spacing = median_spacing
+                                        target_spacing = median_spacing
                                         )
             
             # batch size must be choose by user before train
@@ -303,10 +305,10 @@ class TrainingWorker(QThread):
                                           batch_size=self.train_params.get('batch_size', 2), 
                                           shuffle=True,
                                           collate_fn=pad_list_data_collate)
-            valid_bs = self.train_params.get('batch_size', 2) if self.model_params.get('spatial_dims') == 2 else 1
+            
             valid_dataloader = DataLoader(valid_dataset, 
                                           num_workers=8, 
-                                          batch_size=valid_bs, 
+                                          batch_size=1, 
                                           shuffle=False,
                                           collate_fn=pad_list_data_collate)
             
