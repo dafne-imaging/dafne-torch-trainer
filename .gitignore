@@ -9,7 +9,7 @@ __pycache__/
 *.so
 
 # mac os extension
-*.DS_Store
+*DS_Store
 
 # Distribution / packaging
 .Python

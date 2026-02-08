@@ -169,7 +169,9 @@ class DafneDataset(Dataset):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
 
         pipeline.append(ToTensord(keys=['image', 'mask']))
-        #pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32))
+        
+        if not self.train_transform:
+            pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32, mode='edge'))
 
         return pipeline
     
@@ -223,7 +225,7 @@ if __name__ == "__main__":
 
     try:
         median_spacing = get_median_spacing(all_npz_files, spatial_dims=3)
-        dataset = DafneDataset(data_files=all_npz_files, spatial_dims=3, train_transform=True, target_spacing=median_spacing)
+        dataset = DafneDataset(data_files=all_npz_files, spatial_dims=3, train_transform=False, target_spacing=median_spacing)
         loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=pad_list_data_collate)
         print("Dataset correctly done")
     except Exception as e:

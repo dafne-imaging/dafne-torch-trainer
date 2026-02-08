@@ -1,5 +1,5 @@
 numpy
-dafne-dl
+dafne-dl-torch_models
 matplotlib
 monai[all]
 torch
