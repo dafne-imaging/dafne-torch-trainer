@@ -1,5 +1,6 @@
-# ------- Load dependecies ------------------ # 
 import sys
+import os
+import json
 import traceback
 import random as rd
 import numpy as np
@@ -116,7 +117,7 @@ def pytorch_training_loop(model,
             
                 if save_path:
                     try: 
-                        torch.save(model.state_dict(), save_path)
+                        torch.save(model.state_dict(), os.path.join(save_path, '_best_model.pth'))
                         if on_log: 
                             on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
                     except Exception as e: 
@@ -256,6 +257,12 @@ class TrainingWorker(QThread):
     def _save_model(self):
         return
 
+    def _save_model_params(self, params):
+        '''
+        Save model params in json file
+        '''
+        
+
     # implementation of run method that will be run in separate Thread
     def run(self):
         '''
@@ -336,6 +343,18 @@ class TrainingWorker(QThread):
                 n_classes=n_classes,
                 spatial_dims=spatial_dims
             )
+
+            save_params = {
+                'spatial_dims': self.model_params.get('spatial_dims', 2),
+                'n_levels': self.model_params.get('n_levels', 5),
+                'kernel_size': self.model_params.get('kernel_size', 3),
+                'out_channels': n_classes,
+                'in_channels': self.model_params.get('in_channels', 1),
+                'median_spacing': median_spacing.tolist() if isinstance(median_spacing, np.ndarray) else median_spacing # <--- FONDAMENTALE PER INFERENZA
+            }
+
+            with open(os.path.join(self.save_path, '_params.json'), "w") as json_data: 
+                json.dump(save_params, json_data, indent=4)
 
             '''if self.save_path: 
                 self.sig_status.emit(f"Saving model to {self.save_path}...")

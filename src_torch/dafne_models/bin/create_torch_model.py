@@ -4,19 +4,21 @@ import torch
 import numpy as np
 import dill
 import numpy
+import argparse
+import json
 from collections import OrderedDict
 
 from dafne_dl.DynamicTorchModel import DynamicTorchModel
 
-SPATIAL_DIMS = 3
-N_LEVELS = 5
-IN_CHANNELS = 1
-N_CLASSES = 4
-KERNEL_SIZE = 3
-MEDIAN_SPACING = [8.0, 1.4, 1.4] #example value
-
-WEIGHT_PATH = ''
-OUTPUT_FILENAME = ''
+CONFIG = {
+    'SPATIAL_DIMS': 3,
+    'N_LEVELS': 5,
+    'IN_CHANNELS': 1,
+    'N_CLASSES': 2,
+    'KERNEL_SIZE': 3,
+    'OUT_CHANNELS':2,
+    'MEDIAN_SPACING': [1.0, 1.0, 1.0] # Default di sicurezza
+}
 
 
 def init_network():
@@ -26,11 +28,11 @@ def init_network():
     from dafne_models.models.dafne_network import DafneUnetModel
 
     model = DafneUnetModel(
-        spatial_dims=SPATIAL_DIMS,
-        in_channels=IN_CHANNELS,
-        n_levels=N_LEVELS,
-        kernel_size=KERNEL_SIZE,
-        out_channels=N_CLASSES
+        spatial_dims=CONFIG['SPATIAL_DIMS'],
+        in_channels=CONFIG['IN_CHANNELS'],
+        n_levels=CONFIG['N_LEVELS'],
+        kernel_size=CONFIG['KERNEL_SIZE'],
+        out_channels=CONFIG['OUT_CHANNELS']
     )
 
     return model
@@ -61,8 +63,8 @@ def apply_network(model_obj, input_image):
 
     transf_list = [
         EnsureChannelFirstd(keys=['image'], channel_dim='no_channel'),
-        PreprocessAnisotropy(keys=['image'], target_spacing=MEDIAN_SPACING,
-                            model_mode=None, spatial_dims=SPATIAL_DIMS),
+        PreprocessAnisotropy(keys=['image'], target_spacing=CONFIG['MEDIAN_SPACING'],
+                            model_mode=None, spatial_dims=CONFIG['SPATIAL_DIMS']),
         DivisiblePadd(keys=['image'], k=32),
         ToTensord(keys=['image'])
         ]
@@ -73,13 +75,13 @@ def apply_network(model_obj, input_image):
 
     model_obj.model.eval()
     with torch.no_grad():
-        if SPATIAL_DIMS == 3: 
+        if CONFIG['SPATIAL_DIMS'] == 3: 
             img_tensor = img_tensor.unsqueeze(0).to(model_obj.device)
             output = model_obj.model(img_tensor)
             pred_torch = torch.argmax(output, dim=1)
             pred_vol = pred_torch[0].detach().cpu().numpy().astype(np.int8)
 
-        elif SPATIAL_DIMS == 2: 
+        elif CONFIG['SPATIAL_DIMS'] == 2: 
             pred_vol = []
             depth = img_tensor.shape[1]
             for i in range(depth):
@@ -94,28 +96,60 @@ def apply_network(model_obj, input_image):
 
 
 def main():
+    parser = argparse.ArgumentParser(description='Pack trained model into .dafne format')
+    parser.add_argument('--model_dir', type=str, required=True, help='Directory containing _params.json and .pth weights')
+    parser.add_argument('--weights_name', type=str, default='_best_model.pth', help='Name of the weights file inside model_dir')
+    parser.add_argument('--output', type=str, required=True, help='Output filename (e.g., my_model.dafne)')
+
+    args = parser.parse_args()
+
+    json_path = os.path.join(args.model_dir, '_params.json')
+    if not os.path.exists(json_path):
+        print(f"Error: Params file not found at {json_path}")
+        sys.exit(1)
+    
+    with open(json_path, 'r') as f:
+        params = json.load(f)
+    
+    print("Loaded params:", json.dumps(params, indent=2))
+
+    CONFIG['SPATIAL_DIMS'] = params.get('spatial_dims', 3)
+    CONFIG['N_LEVELS'] = params.get('n_levels', 5)
+    CONFIG['IN_CHANNELS'] = params.get('in_channels', 1)
+    CONFIG['N_CLASSES'] = params.get('out_channels', 2)
+    CONFIG['KERNEL_SIZE'] = params.get('kernel_size', 3)
+    CONFIG['MEDIAN_SPACING'] = params.get('median_spacing', [1.0, 1.0, 1.0])
 
     print('Load model weights...')
-    if not os.path.exists(WEIGHT_PATH):
-        print(f'Error: Weights file not found!')
-        sys.exit(1)
+    if not os.path.exists(os.path.join(args.model_dir, args.weights_name)):
+        try:
+            pth_files = [f for f in os.listdir(args.model_dir) if f.endswith('.pth')]
+            print(f"Warning: '{args.weights_name}' not found. Using '{pth_files[0]}' instead.")
+            args.weights_name = pth_files[0]
+        except:
+            print(f"Error: No weights file found in {args.model_dir}")
+            sys.exit(1)
     else:
-        state_dict = torch.load(WEIGHT_PATH, map_location='cpu')
+        print(f'Load model weights from: {os.path.join(args.model_dir, args.weights_name)}')
+        state_dict = torch.load(os.path.join(args.model_dir, args.weights_name), map_location='cpu')
     
-    # define here DynamicTorchModel
-    
+    # DynamicTorchModel in dafne-dl repo
     dynamic_model = DynamicTorchModel(
         model_id="Dafne_Custom_Model",
         init_model_function=init_network,
         apply_model_function=apply_network,
         weights=state_dict,  
-        data_dimensionality=SPATIAL_DIMS
+        data_dimensionality=CONFIG['SPATIAL_DIMS']
     )
     
-    print(f"Dumping model to {OUTPUT_FILENAME}...")
-    # 3. Salva il file .dafne (Codice + Pesi)
-    with open(OUTPUT_FILENAME, 'wb') as f:
-        dynamic_model.dump(f)
+    # dump dynamic model
+    try: 
+        print(f"Dumping model to {args.output}")
+        with open(args.output, 'wb') as file:
+            dynamic_model.dump(file)
+            print(f"Model dumped in {args.output} successfully!")
+    except Exception as e: 
+        print("Error during model dump: {e}")
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     main()
