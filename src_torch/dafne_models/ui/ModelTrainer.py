@@ -61,6 +61,12 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.augmentation_button.clicked.connect(self.open_augm_settings)
         self.stop_btn.clicked.connect(self.stop_training)
 
+        self.model_3d_check.toggled.connect(self._on_3d_mode_changed)
+        self._on_3d_mode_changed(self.model_3d_check.isChecked())
+
+        self.check_auto_params.toggled.connect(self._on_dynunet_changed)
+        self._on_dynunet_changed(self.check_auto_params.isChecked())
+
         self.fit_Button.clicked.connect(self.start_training)
     
     def _init_matplotlib_canvas(self):      
@@ -88,6 +94,24 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if dialog.exec_() == QDialog.Accepted:
             self.augm_params = dialog.get_settings()
             print(f"Augmentation updated: {self.augm_params}")
+    
+    def _on_3d_mode_changed(self, is_3d_active):
+        self.check_auto_params.setEnabled(is_3d_active)
+
+        if not is_3d_active:
+            self.check_auto_params.setChecked(False)
+
+    def _on_dynunet_changed(self, is_dynunet_active):
+        self.convlayers_spin.setEnabled(not is_dynunet_active)
+        self.kernsize_spin.setEnabled(not is_dynunet_active)
+        self.levels_spin.setEnabled(not is_dynunet_active)
+        self.batch_spin.setEnabled(not is_dynunet_active)
+
+        if not is_dynunet_active:
+            self.convlayers_spin.setEnabled(True)
+            self.kernsize_spin.setEnabled(True)
+            self.levels_spin.setEnabled(True)
+            self.batch_spin.setEnabled(True)
     
     def select_save_path(self):
         options = QFileDialog.Options()
@@ -227,12 +251,15 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         early_stopping = self.early_stopping_check.isChecked()
         spatial_dims = self.model_3d_check.isChecked()
 
+        dyn_unet = self.check_auto_params.isChecked()
+
         model_params = {
             'spatial_dims': 3 if spatial_dims else 2,
             'n_levels': n_levels,
             'kernel_size': kernel_size,
             'n_classes': 2,
-            'in_channels': 1
+            'in_channels': 1,
+            'use_dynamic': dyn_unet
         }
 
         # default values: to be change by the user

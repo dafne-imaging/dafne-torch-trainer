@@ -21,7 +21,11 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from sklearn.model_selection import train_test_split
 
 from .utils import count_label_mask, get_median_spacing
-from ..models import dafne_network
+from ..utils.data_fingerprint import DatasetFingerprint
+from ..utils.optimizer import get_optimal_hyperparameters
+from ..models import dafne_networks
+from .transforms_builder import (build_transform_list, 
+                                 build_transforms_dynunet)
 
 PATIENT = 20
 
@@ -40,6 +44,7 @@ def pytorch_training_loop(model,
                           on_epoch_end=None,
                           check_stop=None,
                           on_log=None,
+                          val_roi_size=None
                           ):
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
@@ -139,7 +144,7 @@ def pytorch_training_loop(model,
         model.eval()
         with torch.no_grad():
             if spatial_dims == 3: 
-                val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model)
+                val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model, val_roi_size)
             else: 
                 val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
             val_pred = torch.argmax((val_pred_out), dim=1).float()
@@ -160,7 +165,7 @@ def pytorch_training_loop(model,
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
 
-def valid_on_batch_3d(image_batch, model):
+def valid_on_batch_3d(image_batch, model, val_roi_size):
     '''
     Methods for validation on 3D batches with sliding inference
     
@@ -169,7 +174,7 @@ def valid_on_batch_3d(image_batch, model):
     '''
     return sliding_window_inference(
         inputs=image_batch,
-        roi_size=(16, 96, 96),
+        roi_size=val_roi_size,
         sw_batch_size=4,
         overlap=0.25,
         predictor=model
@@ -207,7 +212,8 @@ class TrainingWorker(QThread):
                  train_params:dict, 
                  mask_list:list=None,
                  save_path:str=None,
-                 early_stopping:bool=False
+                 early_stopping:bool=False,
+                 dyn_model_params:dict=None,
                  ):
         super().__init__()
         
@@ -215,6 +221,7 @@ class TrainingWorker(QThread):
         self.file_list = file_list
         self.mask_list = mask_list
         self.model_params = model_params
+        self.dyn_unet_params = dyn_model_params
         self.train_params = train_params
         self.save_path = save_path
 
@@ -283,27 +290,90 @@ class TrainingWorker(QThread):
             # define model that has be trained
             # this is an example of unet model
             spatial_dims = self.model_params.get('spatial_dims', 2)
+            use_dynamic = self.model_params.get('use_dynamic', False)
             augm_params = self.train_params.get('augmentation', {})
             median_spacing = get_median_spacing(self.file_list, spatial_dims)
 
+            spatial_dims = self.model_params.get('spatial_dims', 3)
             n_classes = count_label_mask(data_list=self.file_list)
-            model = dafne_network.DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
+
+            if use_dynamic and spatial_dims == 3:
+                self.sig_status.emit("Dynamic Mode: Analyzing Dataset Fingerprint...")
+
+                fingerprint = DatasetFingerprint(self.file_list, spatial_dims=3)
+                median_spacing = fingerprint.data_spacing
+                median_shape = fingerprint.data_shape
+
+                patch_size, auto_batch_size = get_optimal_hyperparameters(
+                    median_shape, spatial_dims=3
+                )
+                final_patch_size = patch_size
+                
+                self.sig_status.emit(f"Auto-Config: Patch={patch_size}, Batch={auto_batch_size}")
+                kernels, strides = fingerprint.get_kernel_and_strides(patch_size)
+
+                model = dafne_networks.DafneDynUnet(spatial_dims=3,
+                                                    in_channels=self.model_params.get('in_channels', 1),
+                                                    out_channels=n_classes,
+                                                    kernel_size=kernels,
+                                                    strides=strides,
+                                                    upsample_kernel_size=strides[1:],
+                                                    norm_name=("INSTANCE", {"affine": True}),
+                                                    deep_supervision=False)
+                
+                train_transforms =  build_transforms_dynunet(
+                    keys=['image', 'mask'],
+                    patch_size=patch_size,
+                    target_spacing=median_spacing,
+                    train_transforms=True,
+                    augm_params=augm_params
+                )
+
+                valid_transforms = build_transforms_dynunet(
+                    keys=['image', 'mask'],
+                    patch_size=patch_size,
+                    target_spacing=median_spacing,
+                    train_transforms=False, 
+                    augm_params=augm_params
+                )
+
+                batch_size = auto_batch_size
+
+            else:
+                self.sig_status.emit("Classic Mode: Using Standard U-Net")
+                
+                fingerprint = DatasetFingerprint(self.file_list, spatial_dims=3)
+                median_spacing = fingerprint.data_spacing
+
+                model = dafne_networks.DafneUnetModel(spatial_dims=spatial_dims,
                                                  n_levels=self.model_params.get('n_levels', 5),
                                                  kernel_size=self.model_params.get('kernel_size', 3),
                                                  out_channels=n_classes,
                                                  in_channels=self.model_params.get('in_channels', 1)).to(self.device)
+                
+                train_transforms = build_transform_list(['filepath'],
+                                                    median_spacing,
+                                                    True,
+                                                    augm_params,
+                                                    spatial_dims)
+
+                valid_transforms = build_transform_list(['filepath'],
+                                                        median_spacing,
+                                                        False,
+                                                        augm_params,
+                                                        spatial_dims)
             
             train_dataset = DafneDataset(data_files=train_list,
                                         augm_params=augm_params,
                                         train_transform=True,
                                         spatial_dims=spatial_dims,
-                                        target_spacing = median_spacing
+                                        external_transforms=train_transforms
                                         )
             valid_dataset = DafneDataset(data_files=valid_list,
                                         augm_params={},
                                         train_transform=False,
                                         spatial_dims=spatial_dims,
-                                        target_spacing = median_spacing
+                                        external_transforms=valid_transforms
                                         )
             
             # batch size must be choose by user before train
@@ -341,7 +411,8 @@ class TrainingWorker(QThread):
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
                 n_classes=n_classes,
-                spatial_dims=spatial_dims
+                spatial_dims=spatial_dims,
+                val_roi_size=final_patch_size if use_dynamic else (16, 96, 96)
             )
 
             save_params = {
@@ -350,7 +421,10 @@ class TrainingWorker(QThread):
                 'kernel_size': self.model_params.get('kernel_size', 3),
                 'out_channels': n_classes,
                 'in_channels': self.model_params.get('in_channels', 1),
-                'median_spacing': median_spacing.tolist() if isinstance(median_spacing, np.ndarray) else median_spacing # <--- FONDAMENTALE PER INFERENZA
+                'median_spacing': median_spacing.tolist() if isinstance(median_spacing, np.ndarray) else median_spacing,
+                'use_dynamic': use_dynamic,
+                'kernel': kernels if use_dynamic else None,
+                'strides': strides if use_dynamic else None
             }
 
             with open(os.path.join(self.save_path, '_params.json'), "w") as json_data: 

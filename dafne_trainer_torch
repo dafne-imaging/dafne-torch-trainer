@@ -3,7 +3,8 @@
 import os 
 import sys
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src_torch'))
+local_src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src_torch')
+sys.path.insert(0, local_src_path)
 
 from dafne_models.ui.ModelTrainer import main as execute_model_trainer
 

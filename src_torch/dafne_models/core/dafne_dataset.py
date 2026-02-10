@@ -6,22 +6,8 @@ from monai.data.utils import list_data_collate, pad_list_data_collate
 
 from monai.transforms import (
     Compose,
-    EnsureChannelFirstd,
-    ScaleIntensityd,
-    MapTransform,
-    LoadImage,
-    ToTensord,
-    Resized,
-    RandRotate90d,
-    RandFlipd,
-    RandZoomd, 
-    RandGaussianNoised,
-    RandCropByPosNegLabeld,
-    DivisiblePadd
+    MapTransform
     )
-
-from dafne_models.core.transforms_utils import PreprocessAnisotropy
-from dafne_models.core.utils import get_median_spacing
 
 class MapTransformLoadData(MapTransform):
     '''
@@ -94,10 +80,11 @@ class DafneDataset(Dataset):
     
     def __init__(self, 
                  data_files:list,
-                 target_spacing:list,
                  augm_params:dict=None,
                  train_transform:bool=True,
                  spatial_dims:int=2,
+                 dyn_unet:bool=False,
+                 external_transforms=None
                  ):
         '''
         Args: 
@@ -108,14 +95,13 @@ class DafneDataset(Dataset):
         self.augm_params = augm_params if augm_params is not None else {}
         self.train_transform = train_transform
         self.spatial_dims = spatial_dims
-        self.target_spacing = target_spacing
         self.keys_to_load = ['filepath']
+        self.external_transforms = external_transforms
 
         data_dict = []
 
         if self.spatial_dims == 3: 
             data_dict = [{'filepath': f} for f in self.data_files] 
-            transforms_list = self._transform_3d_data()
 
         elif self.spatial_dims == 2: 
             for f in self.data_files:
@@ -123,88 +109,17 @@ class DafneDataset(Dataset):
                     depth = npz_data['data'].shape[2]
                     for d in range(depth):
                         data_dict.append({'filepath':f, 'index': d})
-            transforms_list = self._transform_2d_data()
             
-        self.transform = Compose(transforms_list)
+        if self.external_transforms is not None:
+            self.transform = self.external_transforms
+        else:
+            self.transform = None
+            raise ValueError('Any kind of transforms are defined for data!')
 
         super().__init__(data=data_dict, transform=self.transform)
 
     def __len__(self):
         return len(self.data)
-
-    def _transform_3d_data(self):
-        pipeline = [
-            MapTransformLoadData(keys=self.keys_to_load, spatial_dims=3),
-            EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
-        ]
-
-        if not self.train_transform:
-            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
-                                                 target_spacing=self.target_spacing,
-                                                 model_mode=None))
-
-        if self.train_transform:
-            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
-                                                 target_spacing=self.target_spacing,
-                                                 model_mode='train'))
-            
-            pipeline.append( 
-                RandCropByPosNegLabeld(
-                    keys=['image', 'mask'], label_key='mask',
-                    spatial_size=(16, 96, 96), # Patch 3D
-                    pos=1, neg=1, num_samples=4,
-                    image_key='image', image_threshold=0
-                )
-            )
-            
-            if self.augm_params.get('rotate'):
-                pipeline.append(RandRotate90d(keys=['image', 'mask'], prob=0.5, spatial_axes=(1,2)))
-            if self.augm_params.get('flip_x'):
-                pipeline.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=1))
-            if self.augm_params.get('flip_y'):
-                pipeline.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=2))
-            if self.augm_params.get('zoom'):
-                pipeline.append(RandZoomd(keys=['image', 'mask'], prob=0.5, min_zoom=0.9, max_zoom=1.1, mode=['bilinear', 'nearest']))
-            if self.augm_params.get('noise'):
-                pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
-
-        pipeline.append(ToTensord(keys=['image', 'mask']))
-        
-        if not self.train_transform:
-            pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32, mode='edge'))
-
-        return pipeline
-    
-    def _transform_2d_data(self):
-        pipeline = [
-            MapTransformLoadData(keys=self.keys_to_load, spatial_dims=2),
-            EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel')
-        ]
-
-        if not self.train_transform:
-            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
-                                                 target_spacing=self.target_spacing,
-                                                 model_mode=None))
-        
-        if self.train_transform:
-            pipeline.append(PreprocessAnisotropy(keys=['image', 'mask'], 
-                                                 target_spacing=self.target_spacing,
-                                                 model_mode='train'))
-            if self.augm_params.get('rotate'):
-                pipeline.append(RandRotate90d(keys=['image', 'mask'], prob=0.5, spatial_axes=(0,1)))
-            if self.augm_params.get('flip_x'):
-                pipeline.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=0))
-            if self.augm_params.get('flip_y'):
-                pipeline.append(RandFlipd(keys=['image', 'mask'], prob=0.5, spatial_axis=1))
-            if self.augm_params.get('zoom'):
-                pipeline.append(RandZoomd(keys=['image', 'mask'], prob=0.5, min_zoom=0.9, max_zoom=1.1, mode=['bilinear', 'nearest']))
-            if self.augm_params.get('noise'):
-                pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
-        
-        pipeline.append(ToTensord(keys=['image', 'mask']))
-        pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32))
-
-        return pipeline
 
 
 if __name__ == "__main__":
@@ -212,7 +127,7 @@ if __name__ == "__main__":
     import sys
     import matplotlib.pyplot as plt
 
-    # test cachedataset
+    # test dataset and dataloader
     root_data_dir = "/Users/giuseppetimpano/Desktop/Project code/dafne-project/Test_images/Data_Giuseppe" 
     
     all_npz_files = []
@@ -224,8 +139,7 @@ if __name__ == "__main__":
     all_npz_files.sort()
 
     try:
-        median_spacing = get_median_spacing(all_npz_files, spatial_dims=3)
-        dataset = DafneDataset(data_files=all_npz_files, spatial_dims=3, train_transform=False, target_spacing=median_spacing)
+        dataset = DafneDataset(data_files=all_npz_files, spatial_dims=3, train_transform=False)
         loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=pad_list_data_collate)
         print("Dataset correctly done")
     except Exception as e:

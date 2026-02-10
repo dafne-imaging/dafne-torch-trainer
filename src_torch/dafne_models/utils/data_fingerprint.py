@@ -67,7 +67,7 @@ class DatasetFingerprint():
         '''
         Return kernels and strides list based on median data spacing and data shape
         
-        :param data_spacing: median dataset spacing
+        :param patch_size: median dataset spacing
         :param data_shape: median data shape
         '''
 
@@ -75,10 +75,11 @@ class DatasetFingerprint():
             sizes = np.array(patch_size, dtype=float)
         else:
             sizes = np.array(self.data_shape, dtype=float)
-        
-        strides, kernels = [], []
-        sizes = np.array(self.data_shape)
+            
         spacings = np.array(self.data_spacing)
+
+        strides, kernels = [], []
+        
 
         while(True):
             spacing_ratio = [sp / min(spacings) for sp in spacings]

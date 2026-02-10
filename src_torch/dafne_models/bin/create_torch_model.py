@@ -17,7 +17,10 @@ CONFIG = {
     'N_CLASSES': 2,
     'KERNEL_SIZE': 3,
     'OUT_CHANNELS':2,
-    'MEDIAN_SPACING': [1.0, 1.0, 1.0] # Default di sicurezza
+    'MEDIAN_SPACING': [1.0, 1.0, 1.0],
+    'USE_DYNAMIC' : False, 
+    'KERNELS' : [],
+    'STRIDES' : [],
 }
 
 
@@ -25,15 +28,24 @@ def init_network():
     '''
     Inizialize dafne unet network 
     '''
-    from dafne_models.models.dafne_network import DafneUnetModel
+    from dafne_models.models.dafne_network import DafneUnetModel, DafneDynUnet
 
-    model = DafneUnetModel(
-        spatial_dims=CONFIG['SPATIAL_DIMS'],
-        in_channels=CONFIG['IN_CHANNELS'],
-        n_levels=CONFIG['N_LEVELS'],
-        kernel_size=CONFIG['KERNEL_SIZE'],
-        out_channels=CONFIG['OUT_CHANNELS']
-    )
+    if CONFIG['USE_DYNAMIC']:
+        # Ricostruzione DynUNet
+        model = DafneDynUnet(
+            in_channels=CONFIG['IN_CHANNELS'],
+            out_channels=CONFIG['N_CLASSES'],
+            kernel_size=CONFIG['KERNELS'],
+            strides=CONFIG['STRIDES']
+        )
+    else:
+        model = DafneUnetModel(
+            spatial_dims=CONFIG['SPATIAL_DIMS'],
+            in_channels=CONFIG['IN_CHANNELS'],
+            n_levels=CONFIG['N_LEVELS'],
+            kernel_size=CONFIG['KERNEL_SIZE'],
+            out_channels=CONFIG['OUT_CHANNELS']
+        )
 
     return model
 
@@ -119,6 +131,9 @@ def main():
     CONFIG['N_CLASSES'] = params.get('out_channels', 2)
     CONFIG['KERNEL_SIZE'] = params.get('kernel_size', 3)
     CONFIG['MEDIAN_SPACING'] = params.get('median_spacing', [1.0, 1.0, 1.0])
+    CONFIG['USE_DYNAMIC'] = params.get('use_dynamic', False)
+    CONFIG['KERNELS'] = params.get('kernels', [])
+    CONFIG['STRIDES'] = params.get('strides', [])
 
     print('Load model weights...')
     if not os.path.exists(os.path.join(args.model_dir, args.weights_name)):
