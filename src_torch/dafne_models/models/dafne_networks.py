@@ -41,23 +41,26 @@ class DafneUnetModel(nn.Module):
 
 class DafneDynUnet(nn.Module):
     def __init__(self,
+                spatial_dims,
                 in_channels:int,
                 out_channels:int,
                 kernel_size:list,
                 strides:list,
+                deep_supervision:bool,
+                norm_name
                 ):
         
         super().__init__()
 
         self.dyn_unet = monai_nets.DynUnet(
-            spatial_dims=3,
+            spatial_dims=spatial_dims,
             in_channels=in_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
             strides=strides,
-            upsample_kernel_size=strides[:1],
-            deep_supervision=True,
-            deep_supr_num=1, 
+            upsample_kernel_size=strides[1:],
+            deep_supervision=deep_supervision,
+            norm_name=norm_name,
             res_block=True
         )
     

@@ -81,8 +81,8 @@ def build_transform_list(keys:list,
             if augm_params.get('noise'):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
             
-            pipeline.append(ToTensord(keys=['image', 'mask']))
-            pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32))
+    pipeline.extend([ToTensord(keys=['image', 'mask']), 
+                        DivisiblePadd(keys=['image', 'mask'], k=32)])
     
     return pipeline
 
@@ -95,7 +95,7 @@ def build_transforms_dynunet(keys: list,
                             )-> list:
 
     pipeline = [
-        MapTransformLoadData(keys=keys, spatial_dims=3),
+        MapTransformLoadData(keys=['filepath'], spatial_dims=3),
         EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
         PreprocessAnisotropy(keys=['image', 'mask'], 
                                                 target_spacing=target_spacing,

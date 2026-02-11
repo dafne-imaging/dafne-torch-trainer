@@ -22,16 +22,27 @@ def resample_image(image, shape, anisotrophy_flag):
     :param shape: image shape
     :param anisotrophy_flag: True if image is anisotrophy
     '''
+    if image.ndim == 4:
+        image_list = image
+        is_multichannel = True
+    else:
+        image_list = [image]
+        is_multichannel = False
+
     resized_channels = []
-    if anisotrophy_flag: #if anysotrophy image
-        for image_c in image:
+
+    for image_c in image_list:
+        # image_c: np.array(Depth, Height, Width)
+        
+        if anisotrophy_flag:
             resized_slices = []
-            # reshape single slices 
-            for i in range(image_c.shape[-1]):
-                image_c_2d_slice = image_c[:, :, i]
+            target_2d_shape = shape[1:]
+
+            for i in range(image_c.shape[0]):
+                image_c_2d_slice = image_c[i, :, :]
                 image_c_2d_slice = resize(
                     image_c_2d_slice,
-                    shape[:-1],
+                    target_2d_shape,
                     order=3,
                     mode="edge",
                     cval=0,
@@ -39,20 +50,21 @@ def resample_image(image, shape, anisotrophy_flag):
                     anti_aliasing=False,
                 )
                 resized_slices.append(image_c_2d_slice)
-            resized = np.stack(resized_slices, axis=-1)
-            # after slices resize, resize 3d volume
-            resized = resize(
-                resized,
-                shape,
-                order=0,
-                mode="constant",
-                cval=0,
-                clip=True,
-                anti_aliasing=False,
-            )
+            resized = np.stack(resized_slices, axis=0)
+            
+            if resized.shape[0] != shape[0]:
+                resized = resize(
+                    resized,
+                    shape,
+                    order=1,
+                    mode="constant",
+                    cval=0,
+                    clip=True,
+                    anti_aliasing=False,
+                )
             resized_channels.append(resized)
-    else: # not a anisotrophy image
-        for image_c in image:
+
+        else:
             resized = resize(
                 image_c,
                 shape,
@@ -63,8 +75,11 @@ def resample_image(image, shape, anisotrophy_flag):
                 anti_aliasing=False,
             )
             resized_channels.append(resized)
-    resized = np.stack(resized_channels, axis=0)
-    return resized
+    
+    if is_multichannel:
+        return np.stack(resized_channels, axis=0)
+    else:
+        return resized_channels[0]
 
 def resample_label(label, shape, anisotrophy_flag):
     '''
@@ -74,45 +89,65 @@ def resample_label(label, shape, anisotrophy_flag):
     :param shape: image shape
     :param anisotrophy_flag: True if image is anisotrophy
     '''
+    if label.ndim == 4:
+        label_vol = label[0] 
+    else:
+        label_vol = label
+
     reshaped = np.zeros(shape, dtype=np.uint8)
-    n_class = np.max(label)
+    n_class = np.max(label_vol)
+    
     if anisotrophy_flag:
-        shape_2d = shape[:-1]
-        depth = label.shape[-1]
-        reshaped_2d = np.zeros((*shape_2d, depth), dtype=np.uint8)
+        shape_2d = shape[1:]
+        depth = label_vol.shape[0]
+        
+        reshaped_2d = np.zeros((depth, *shape_2d), dtype=np.uint8)
 
         for class_ in range(1, int(n_class) + 1):
             for depth_ in range(depth):
-                mask = label[0, :, :, depth_] == class_
+                mask = label_vol[depth_, :, :] == class_
+                
+                if not np.any(mask): continue
+
                 resized_2d = resize(
                     mask.astype(float),
                     shape_2d,
-                    order=1,
+                    order=0,
                     mode="edge",
                     cval=0,
                     clip=True,
                     anti_aliasing=False,
                 )
-                reshaped_2d[:, :, depth_][resized_2d >= 0.5] = class_
+                reshaped_2d[depth_, :, :][resized_2d >= 0.5] = class_
+        
+        target_depth = shape[0]
+        if depth != target_depth:
+            for class_ in range(1, int(n_class) + 1):
+                mask = reshaped_2d == class_
+                if not np.any(mask): continue
+                
+                resized = resize(
+                    mask.astype(float),
+                    shape,
+                    order=0,
+                    mode="constant",
+                    cval=0,
+                    clip=True,
+                    anti_aliasing=False,
+                )
+                reshaped[resized >= 0.5] = class_
+        else:
+            reshaped = reshaped_2d
+
+    else:
         for class_ in range(1, int(n_class) + 1):
-            mask = reshaped_2d == class_
+            mask = label_vol == class_
+            if not np.any(mask): continue
+            
             resized = resize(
                 mask.astype(float),
                 shape,
                 order=0,
-                mode="constant",
-                cval=0,
-                clip=True,
-                anti_aliasing=False,
-            )
-            reshaped[resized >= 0.5] = class_
-    else:
-        for class_ in range(1, int(n_class) + 1):
-            mask = label[0] == class_
-            resized = resize(
-                mask.astype(float),
-                shape,
-                order=1,
                 mode="edge",
                 cval=0,
                 clip=True,

@@ -69,7 +69,6 @@ def pytorch_training_loop(model,
                 break
             inputs = batch['image'].to(device)
             targets = batch['mask'].long().to(device)
-            print(f'train input shape: {inputs.shape}')
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, targets)
@@ -99,9 +98,8 @@ def pytorch_training_loop(model,
                     break
                 val_image = batch['image'].to(device)
                 val_mask = batch['mask'].long().to(device)
-                print(f'val input shape: {val_image.shape}, val mask shape: {val_mask.shape}')
                 if spatial_dims == 3: 
-                    val_output = valid_on_batch_3d(val_image, model) # return original tensor shape
+                    val_output = valid_on_batch_3d(val_image, model, val_roi_size) # return original tensor shape
                 else:
                     val_output = model(val_image)
                 val_output_decollate = decollate_batch(val_output)
@@ -111,6 +109,10 @@ def pytorch_training_loop(model,
                 
                 dice_metric(y_pred=val_preds, y=val_masks)
                 val_loss += criterion(val_output, val_mask).item()
+            
+            if check_stop is not None and check_stop():
+                break
+
             dice_score = dice_metric.aggregate().item()
             avg_val_loss = val_loss / len(valid_dataloader)
 
@@ -122,11 +124,15 @@ def pytorch_training_loop(model,
             
                 if save_path:
                     try: 
-                        torch.save(model.state_dict(), os.path.join(save_path, '_best_model.pth'))
+                        save_dir = os.path.dirname(save_path)
+                        best_model_path = os.path.join(save_dir, '_best_model.pth')
+                        torch.save(model.state_dict(), best_model_path)
+                        
                         if on_log: 
                             on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
+                            
                     except Exception as e: 
-                            print('Error during model saving {e}')
+                        print(f'Error during model saving: {e}')
             
             elif early_stopping:
                 counter += 1       
@@ -219,7 +225,6 @@ class TrainingWorker(QThread):
         
         # inzialize worker parameters
         self.file_list = file_list
-        self.mask_list = mask_list
         self.model_params = model_params
         self.dyn_unet_params = dyn_model_params
         self.train_params = train_params
@@ -281,7 +286,7 @@ class TrainingWorker(QThread):
             from .dafne_dataset import DafneDataset
 
             self.sig_status.emit(f"Training initialization on: {self.device} device")
-            self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...)")
+            self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...) in {self.file_list}")
             
             # split dataset into train and validation
             train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
@@ -312,14 +317,13 @@ class TrainingWorker(QThread):
                 self.sig_status.emit(f"Auto-Config: Patch={patch_size}, Batch={auto_batch_size}")
                 kernels, strides = fingerprint.get_kernel_and_strides(patch_size)
 
-                model = dafne_networks.DafneDynUnet(spatial_dims=3,
+                model = dafne_networks.DafneDynUnet(spatial_dims = 3,
                                                     in_channels=self.model_params.get('in_channels', 1),
                                                     out_channels=n_classes,
                                                     kernel_size=kernels,
                                                     strides=strides,
-                                                    upsample_kernel_size=strides[1:],
                                                     norm_name=("INSTANCE", {"affine": True}),
-                                                    deep_supervision=False)
+                                                    deep_supervision=False).to(self.device)
                 
                 train_transforms =  build_transforms_dynunet(
                     keys=['image', 'mask'],
@@ -377,9 +381,10 @@ class TrainingWorker(QThread):
                                         )
             
             # batch size must be choose by user before train
+            batch_size = self.train_params.get('batch_size', 2)
             train_dataloader = DataLoader(train_dataset, 
                                           num_workers=8, 
-                                          batch_size=self.train_params.get('batch_size', 2), 
+                                          batch_size=batch_size, 
                                           shuffle=True,
                                           collate_fn=pad_list_data_collate)
             
@@ -415,6 +420,9 @@ class TrainingWorker(QThread):
                 val_roi_size=final_patch_size if use_dynamic else (16, 96, 96)
             )
 
+            save_dir = os.path.dirname(self.save_path)
+            json_path = os.path.join(save_dir, '_params.json')
+
             save_params = {
                 'spatial_dims': self.model_params.get('spatial_dims', 2),
                 'n_levels': self.model_params.get('n_levels', 5),
@@ -427,13 +435,12 @@ class TrainingWorker(QThread):
                 'strides': strides if use_dynamic else None
             }
 
-            with open(os.path.join(self.save_path, '_params.json'), "w") as json_data: 
-                json.dump(save_params, json_data, indent=4)
-
-            '''if self.save_path: 
-                self.sig_status.emit(f"Saving model to {self.save_path}...")
-                torch.save(model.state_dict(), self.save_path)
-                print(f'Model weights saved in {self.save_path}')'''
+            try:
+                with open(json_path, "w") as json_data: 
+                    json.dump(save_params, json_data, indent=4)
+            except Exception as e:
+                print(f"Error saving params: {e}")
+            
             if not self.is_running:
                 self.sig_stopped.emit()
             else:

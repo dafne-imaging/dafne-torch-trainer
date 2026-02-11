@@ -31,6 +31,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.setWindowTitle('Dafne Model Trainer (PyTorch Backend)')
         
+        self.verticalLayout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
+
         self.save_path = None
         self.worker = None #training thread
         self.image_paths = [] #path to images
@@ -71,8 +73,15 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     
     def _init_matplotlib_canvas(self):      
         self.pyplot_layout = QVBoxLayout(self.fit_output_box)
-        self.fig = plt.figure(figsize=(10, 6))
+        self.fig = plt.figure(figsize=(2, 2)) 
+        
         self.canvas = FigureCanvas(self.fig)
+        self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Ignored, 
+                                  QtWidgets.QSizePolicy.Ignored)
+        self.canvas.setMinimumSize(10, 10) 
+        
+        self.canvas.updateGeometry()
+
         self.pyplot_layout.addWidget(self.canvas)
 
         self.ax_loss = self.fig.add_subplot(121)
@@ -82,8 +91,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_preview = self.fig.add_subplot(122)
         self.ax_preview.set_title("Live Preview")
         self.ax_preview.axis('off')
-
-        self.canvas.draw()
     
     def toggle_advanced_option(self):
         is_visible = self.advanced_widget.isVisible()
@@ -237,6 +244,12 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.val_loss_history = []
         self.ax_loss.clear()
         self.ax_preview.clear()
+        
+        self.ax_loss.set_title("Loss")
+        self.ax_loss.grid(True, linestyle='--', alpha=0.6)
+        self.ax_preview.axis('off')
+        self.canvas.draw()
+
         self.progressBar.setValue(0)
         self.progress_Label.setText("Inizialization...")
 
@@ -272,7 +285,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.worker = TrainingWorker(
             file_list=self.image_paths,
-            mask_list=self.mask_paths,
             model_params=model_params,
             train_params=train_params,
             save_path=self.save_path,
@@ -290,7 +302,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     
     def stop_training(self):
         if self.worker is not None and self.worker.isRunning():
-            self.stop_btn.setEnabled(False) # Evita doppi click
+            self.stop_btn.setEnabled(False)
             self.update_status_label("Stopping training. Please wait...")
             self.worker.stop()
 
@@ -339,6 +351,11 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def handle_error(self, err):
         self._status_btn(False)
         QMessageBox.critical(self, "Error", f"Training is stopping:\n{err}")
+
+        self.progressBar.setValue(0)
+        self.progress_Label.setText("Error occurred.")
+        self.fit_output_box.setVisible(False)
+
         self._reset_ui_state()
     
     def on_training_stopped(self):
@@ -347,11 +364,12 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.progress_Label.setText("")
         
         self.fit_output_box.setVisible(False)
-        
         self.loss_history = []
         self.val_loss_history = []
         self.ax_loss.clear()
         self.ax_preview.clear()
+
+        QMessageBox.information(self, "Stopped", "Training stopped correctly.")
         
     
     def on_training_finished(self):
