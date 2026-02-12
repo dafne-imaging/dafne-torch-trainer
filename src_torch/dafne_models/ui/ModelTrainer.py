@@ -322,7 +322,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def update_status_label(self, message): 
         self.progress_Label.setText(message)
     
-    @QtCore.pyqtSlot(float, object, object, float)
+    @QtCore.pyqtSlot(float, object, object, float, object)
     def update_plots(self, loss, img, mask, val_loss, spacing):
         self.loss_history.append(loss)
         self.val_loss_history.append(val_loss)
@@ -336,13 +336,22 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_preview.clear()
         
         if img.ndim == 3: img = img[0, :, :] # only the first channel
+
+        # --- BLOCCO DI DEBUG (Da rimuovere dopo) ---
+        print("\n--- DEBUG VISUALIZZAZIONE ---")
+        print(f"1. Shape immagine a video (H, W): {img.shape}") 
+        # Es. (60, 320) significa 60 righe (Y), 320 colonne (X)
+        
+        print(f"2. Vettore Spacing ricevuto: {spacing}")
+        # Es. [1.18, 3.0, 1.18]
+        # -------------------------------------------
         
         pixel_aspect = 1.0 # isotropic 
         if spacing is not None and len(spacing) >= 2:
             try:
                 sp_y = spacing[-2] 
                 sp_x = spacing[-1]
-                pixel_aspect = float(sp_y / sp_x)
+                pixel_aspect = float(sp_x / sp_y)
             except Exception as e:
                 print(f"Error pixel aspect calcultation: {e}")
                 pixel_aspect = 1.0
