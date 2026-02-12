@@ -323,7 +323,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.progress_Label.setText(message)
     
     @QtCore.pyqtSlot(float, object, object, float)
-    def update_plots(self, loss, img, mask, val_loss):
+    def update_plots(self, loss, img, mask, val_loss, spacing):
         self.loss_history.append(loss)
         self.val_loss_history.append(val_loss)
         self.ax_loss.clear()
@@ -336,12 +336,22 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_preview.clear()
         
         if img.ndim == 3: img = img[0, :, :] # only the first channel
+        
+        pixel_aspect = 1.0 # isotropic 
+        if spacing is not None and len(spacing) >= 2:
+            try:
+                sp_y = spacing[-2] 
+                sp_x = spacing[-1]
+                pixel_aspect = float(sp_y / sp_x)
+            except Exception as e:
+                print(f"Error pixel aspect calcultation: {e}")
+                pixel_aspect = 1.0
 
-        self.ax_preview.imshow(img, cmap='gray')
+        self.ax_preview.imshow(img, cmap='gray', aspect=pixel_aspect)
 
         if mask is not None: 
             masked = np.ma.masked_where(mask == 0, mask)
-            self.ax_preview.imshow(masked, cmap='autumn', alpha=0.5)
+            self.ax_preview.imshow(masked, cmap='autumn', alpha=0.5, aspect=pixel_aspect)
         
         self.ax_preview.axis('off')
         self.canvas.draw()

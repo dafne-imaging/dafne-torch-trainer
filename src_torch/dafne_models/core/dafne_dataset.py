@@ -128,7 +128,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     # test dataset and dataloader
-    root_data_dir = "/Users/giuseppetimpano/Desktop/Project code/dafne-project/Test_images/Data_Giuseppe" 
+    root_data_dir = "" 
     
     all_npz_files = []
     for root, dirs, files in os.walk(root_data_dir):

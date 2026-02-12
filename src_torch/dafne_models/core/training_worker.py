@@ -147,6 +147,11 @@ def pytorch_training_loop(model,
         val_image = sample['image'].to(device)
         val_mask = sample['mask'].to(device)
 
+        current_spacing = sample['image_meta_dict']['pixdim']
+        if isinstance(current_spacing, torch.Tensor):
+            current_spacing = current_spacing.cpu().numpy()
+        img_spacing = current_spacing[1:]
+
         model.eval()
         with torch.no_grad():
             if spatial_dims == 3: 
@@ -166,7 +171,7 @@ def pytorch_training_loop(model,
             # send to GUI for each epoch, the current epoch, avg_loss and rand image
             # and his model predicted mask
             if on_epoch_end:    
-                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss)
+                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss, img_spacing)
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
@@ -195,7 +200,7 @@ class TrainingWorker(QThread):
     '''
     
     # Send data to cpu (float, numpy, numpy)
-    sig_update_plot = pyqtSignal(float, object, object, float)
+    sig_update_plot = pyqtSignal(float, object, object, float, object)
 
     # Send status information for user console
     sig_status = pyqtSignal(str)
@@ -235,13 +240,13 @@ class TrainingWorker(QThread):
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def _callback_epoch_end(self, epoch, loss, img, mask, val_loss):
+    def _callback_epoch_end(self, epoch, loss, img, mask, val_loss, spacing):
         
         '''
         Function called at the end of each epoch by the Engine
         '''
 
-        self.sig_update_plot.emit(loss, img, mask, val_loss)
+        self.sig_update_plot.emit(loss, img, mask, val_loss, spacing)
         total_epochs = self.train_params.get('epochs')
         current_epoch = epoch + 1
         percent = int((current_epoch / total_epochs) * 100)
