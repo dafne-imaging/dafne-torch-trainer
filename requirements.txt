@@ -4,3 +4,5 @@ matplotlib
 monai[all]
 torch
 SimpleITK
+PyQt5
+scikit-learn

@@ -1,0 +1,172 @@
+import os
+import torch
+import random as rd
+
+from monai.metrics import DiceMetric
+from monai.data import decollate_batch
+from monai.inferers import sliding_window_inference
+from monai.transforms import Compose, AsDiscrete
+
+PATIENT = 20
+
+# definition of classic training loop
+def pytorch_training_loop(model, 
+                          train_dataloader,
+                          valid_dataloader,
+                          optimizer, 
+                          criterion,
+                          device,
+                          epochs,
+                          spatial_dims:int=2,
+                          n_classes:int=2,
+                          early_stopping:bool=False,
+                          save_path:str=None,
+                          on_epoch_end=None,
+                          check_stop=None,
+                          on_log=None,
+                          val_roi_size=None
+                          ):
+    
+    if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
+    
+    dice_metric = DiceMetric(include_background=True, reduction='mean')
+    best_val_dice_score = -float("inf")
+    counter = 0
+
+    for epoch in range(epochs):
+        
+        # check training stop  by user
+        if check_stop is not None and check_stop():
+            if on_log: on_log(f"Training stopped by user")
+            break
+        
+        # classic pytorch training loop defined
+        model.train()
+        epoch_loss = 0.0
+        
+        for batch in train_dataloader:
+            if check_stop is not None and check_stop():
+                break
+            inputs = batch['image'].to(device)
+            targets = batch['mask'].long().to(device)
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
+            loss.backward()
+            optimizer.step()
+
+            epoch_loss += loss.item()
+        
+        if check_stop is not None and check_stop():
+            break
+        
+        avg_loss = epoch_loss / len(train_dataloader)
+
+        val_loss = 0.0
+        model.eval()
+
+        post_pred = Compose([
+            AsDiscrete(argmax=True, to_onehot=n_classes)
+        ])
+        post_label = Compose([
+            AsDiscrete(to_onehot=n_classes)
+        ])
+
+        with torch.no_grad():
+            for batch in valid_dataloader:
+                if check_stop is not None and check_stop():
+                    break
+                val_image = batch['image'].to(device)
+                val_mask = batch['mask'].long().to(device)
+                if spatial_dims == 3: 
+                    val_output = valid_on_batch_3d(val_image, model, val_roi_size) # return original tensor shape
+                else:
+                    val_output = model(val_image)
+                val_output_decollate = decollate_batch(val_output)
+                val_label_decollate = decollate_batch(val_mask)
+                val_preds = [post_pred(i) for i in val_output_decollate]
+                val_masks = [post_label(i) for i in val_label_decollate]
+                
+                dice_metric(y_pred=val_preds, y=val_masks)
+                val_loss += criterion(val_output, val_mask).item()
+            
+            if check_stop is not None and check_stop():
+                break
+
+            dice_score = dice_metric.aggregate().item()
+            avg_val_loss = val_loss / len(valid_dataloader)
+
+            dice_metric.reset()
+
+            if dice_score > best_val_dice_score:
+                best_val_dice_score = dice_score
+                counter = 0
+            
+                if save_path:
+                    try: 
+                        save_dir = os.path.dirname(save_path)
+                        best_model_path = os.path.join(save_dir, '_best_model.pth')
+                        torch.save(model.state_dict(), best_model_path)
+                        
+                        if on_log: 
+                            on_log(f'New best Dice score {best_val_dice_score:.4f}. Model saved!')
+                            
+                    except Exception as e: 
+                        print(f'Error during model saving: {e}')
+            
+            elif early_stopping:
+                counter += 1       
+                if counter >= PATIENT:
+                    on_log(f'Training interrupted because of early stopping. Model saved in {save_path}') 
+                    break
+                
+        #take random valid image of batch from random valid dataloader
+        dataset = valid_dataloader.dataset
+        idx = rd.randrange(len(dataset))
+        sample = dataset[idx]
+        val_image = sample['image'].to(device)
+        val_mask = sample['mask'].to(device)
+
+        current_spacing = sample['image_meta_dict']['pixdim']
+        if isinstance(current_spacing, torch.Tensor):
+            current_spacing = current_spacing.cpu().numpy()
+        img_spacing = current_spacing[1:]
+
+        model.eval()
+        with torch.no_grad():
+            if spatial_dims == 3: 
+                val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model, val_roi_size)
+            else: 
+                val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
+            val_pred = torch.argmax((val_pred_out), dim=1).float()
+
+            dims = val_image.shape
+            if len(dims)==4: # 3D volume [B, H, W, D] - no C because of argmax
+                img_np = val_image[0, dims[1]//2, :, :].cpu().numpy()
+                pred_np = val_pred[0, dims[1]//2, :, :].cpu().numpy()
+            elif len(dims)==3: # 2D images [B, H, W] - no C because of argmax
+                img_np = val_image[0].cpu().numpy()
+                pred_np = val_pred[0].cpu().numpy()
+
+            # send to GUI for each epoch, the current epoch, avg_loss and rand image
+            # and his model predicted mask
+            if on_epoch_end:    
+                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss, img_spacing)
+       
+    if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
+
+
+def valid_on_batch_3d(image_batch, model, val_roi_size):
+    '''
+    Methods for validation on 3D batches with sliding inference
+    
+    :param image_batch: current image batch
+    :param model: model for patch prediction
+    '''
+    return sliding_window_inference(
+        inputs=image_batch,
+        roi_size=val_roi_size,
+        sw_batch_size=4,
+        overlap=0.25,
+        predictor=model
+    )
