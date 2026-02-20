@@ -5,7 +5,18 @@ from torch import nn, Tensor
 from .layers import LoRA2dConvLayer, LoRA3dConvLayer, LoRANdConvLayer, LoRALinearLayer
 
 class LoRAModel(nn.Module):
+    '''
+        LoRA wrapper model
+    '''
     def __init__(self, base_model:nn.Module, lora_config:dict) -> None: 
+        '''
+        Args: 
+            base_model: base model to wrap
+            lora_config: dictionary that contain  
+                the configuration for LoRA layers, including:
+                - rank: the rank of the update matrices.
+                - alpha: the scaling factor.
+        '''
         super(LoRAModel, self).__init__()
 
         self.base_model = base_model

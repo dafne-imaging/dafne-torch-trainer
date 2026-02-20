@@ -38,6 +38,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.image_paths = [] #path to images
         self.mask_paths = [] #path to masks
         self.train_params = {} #training params
+        self.pretrained_path = None
         self.augm_params = {'rotate':False,
                             'flip_x':False,
                             'flip_y':False,
@@ -62,6 +63,10 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.save_choose_Button.clicked.connect(self.select_save_path)
         self.augmentation_button.clicked.connect(self.open_augm_settings)
         self.stop_btn.clicked.connect(self.stop_training)
+
+        self.train_mode_combo.currentIndexChanged.connect(self._on_train_mode_changes)
+        self.pretrain_choose_Button.clicked.connect(self.select_pretrained_path)
+        self._on_train_mode_changes(self.train_mode_combo.currentIndex())
 
         self.model_3d_check.toggled.connect(self._on_3d_mode_changed)
         self._on_3d_mode_changed(self.model_3d_check.isChecked())
@@ -102,6 +107,26 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self.augm_params = dialog.get_settings()
             print(f"Augmentation updated: {self.augm_params}")
     
+    def _on_train_mode_changes(self, index):
+        is_pretrained_mode = (index > 0)
+
+        self.pretrained_location_Text.setEnabled(is_pretrained_mode)
+        self.pretrain_choose_Button.setEnabled(is_pretrained_mode)
+
+    def select_pretrained_path(self) -> None:
+        options = QFileDialog.Options()
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose pretrained model path",
+            "",
+            "Pytorch Model (.pth);;All files (*)",
+            options=options
+        )
+
+        if filename:
+            self.pretrained_path = filename
+            self.pretrained_location_Text.setText(filename)
+
     def _on_3d_mode_changed(self, is_3d_active):
         self.check_auto_params.setEnabled(is_3d_active)
 

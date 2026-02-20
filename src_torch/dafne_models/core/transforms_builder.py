@@ -108,7 +108,6 @@ def build_transforms_dynunet(keys: list,
     
     if train_transforms:
         pipeline.extend([
-            # Il Crop è il motore della DynUNet: estrae la patch della dimensione calcolata dalla VRAM
             RandCropByPosNegLabeld(
                 keys=keys,
                 label_key="mask",

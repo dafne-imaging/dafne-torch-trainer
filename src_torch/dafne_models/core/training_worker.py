@@ -5,8 +5,6 @@ import random as rd
 import numpy as np
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
 
 from monai.data import DataLoader
 from monai.losses import DiceCELoss
@@ -21,6 +19,7 @@ from .utils import count_label_mask, get_median_spacing
 from ..utils.data_fingerprint import DatasetFingerprint
 from ..utils.optimizer import get_optimal_hyperparameters
 from ..models import dafne_networks
+from ..bin.create_torch_model import create_dynamic_model
 from .transforms_builder import (build_transform_list, 
                                  build_transforms_dynunet)
 
@@ -31,6 +30,8 @@ class TrainingWorker(QThread):
     '''
         Worker class that runs the PyTorch training loop in a separate thread.
         Ensures the GUI remains responsive during intensive computation.
+        Training Worker save model training parameters and memory buffer from original dataset
+        for future incremental learning in fine-tuning
     '''
     
     # Send data to cpu (float, numpy, numpy)
@@ -61,6 +62,7 @@ class TrainingWorker(QThread):
                  early_stopping:bool=False,
                  dyn_model_params:dict=None,
                  ):
+        
         super().__init__()
         
         # inzialize worker parameters
@@ -308,7 +310,8 @@ class TrainingWorker(QThread):
             kernels, strides, median_spacing, median_shape
     
 
-    def apply_lora(self,)
+    def apply_lora(self):
+        return
 
     def freeze_layers(self, model, degree: float) -> None:
         '''
@@ -444,8 +447,12 @@ class TrainingWorker(QThread):
             )
 
             save_dir = os.path.dirname(self.save_path)
+            '''
             json_path = os.path.join(save_dir, f'{model_name}_params.json')
+            json_memory_buffer_path = os.path.join(save_dir, f'{model_name}_memory_buffer.json')
+            '''
 
+            # to be added: labels' name, norm_params, version
             save_params = {
                 'model_name': model_name,
                 'train_list': train_list,
@@ -465,11 +472,34 @@ class TrainingWorker(QThread):
                 'data_shape': median_shape.tolist() if isinstance(median_shape, np.ndarray) else median_shape
             }
 
+            # take random images from train and validation list to save memory buffer
+            # take random 20% images from original train_list and validation_list
+            memory_buffer = {
+                'train_path_list': [os.path.abspath(p) for p in rd.sample(train_list, len(train_list)//20)],
+                'valid_path_list': [os.path.abspath(p) for p in rd.sample(valid_list, len(valid_list)//20)]
+            }
+
+            '''
             try:
                 with open(json_path, "w") as json_data: 
                     json.dump(save_params, json_data, indent=4)
             except Exception as e:
                 print(f"Error saving params: {e}")
+            
+            try:
+                with open(json_memory_buffer_path, "w") as json_data:
+                    json.dump(memory_buffer, json_data, indent=4)
+            except Exception as e:
+                print(f"Error saving memory buffer: {e}")
+            '''
+
+            #save model, weights and metadata in .dafne format
+            weights_path = os.path.join(save_dir, f'{model_name}_best_model.pth')
+            best_weights = torch.load(weights_path, map_location='cpu')
+            output_path = os.path.join(save_dir, f'{model_name}_final_model.dafne')
+            self.sig_status.emit("Packaging the model into .dafne format...")
+            with open(output_path, 'wb') as f:
+                create_dynamic_model(weights=best_weights, net_metadata=save_params, train_metadata=memory_buffer).dump(f)
             
             if not self.is_running:
                 self.sig_stopped.emit()

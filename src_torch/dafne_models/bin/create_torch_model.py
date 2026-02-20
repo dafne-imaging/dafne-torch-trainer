@@ -107,11 +107,124 @@ def apply_network(model_obj, input_image):
         return pred_vol
 
 
+def create_dynamic_model(weights, net_metadata, train_metadata):
+    '''
+    Create dynamic model
+    
+    :param model: Model object
+    :param weights: Model weights
+    :param net_metadata: Model metadata
+    :param train_metadata: Training metadata
+    '''
+
+    metadata = {
+        'net_metadata': net_metadata,
+        'train_metadata': train_metadata
+    }
+
+    def build_model():
+        from dafne_models.models.dafne_network import DafneUnetModel, DafneDynUnet
+
+        if metadata['net_metadata']['use_dynamic']:
+            return DafneDynUnet(
+                in_channels=metadata['net_metadata']['in_channels'],
+                out_channels=metadata['net_metadata']['out_channels'],
+                kernel_size=metadata['net_metadata']['kernels'],
+                strides=metadata['net_metadata']['strides']
+            )
+        else:
+            return DafneUnetModel(
+                spatial_dims=metadata['net_metadata']['spatial_dims'],
+                in_channels=metadata['net_metadata']['in_channels'],
+                n_levels=metadata['net_metadata']['n_levels'],
+                kernel_size=metadata['net_metadata']['kernel_size'],
+                out_channels=metadata['net_metadata']['out_channels']
+            )
+    
+    def apply_network_inf(model_obj, input_image):
+        import numpy as np
+        import torch
+        from monai.transforms import (
+            Compose,
+            EnsureChannelFirstd,
+            ToTensord,
+            SpatialPadd, 
+            CastToTyped,
+            DivisiblePadd
+        )
+        from dafne_models.core.transforms_utils import PreprocessAnisotropy
+
+        if not input_image.shape[0] < input_image.shape[1]: 
+            input_image = np.ascontiguousarray(np.moveaxis(input_image, -1, 0))
+
+        dyn_model = model_obj.metadata['net_metadata']['use_dynamic']
+        data = {'image': input_image}
+        spacing = model_obj.metadata['net_metadata']['median_spacing']
+        spatial_dims = model_obj.metadata['net_metadata']['spatial_dims']
+
+        if not dyn_model:
+            transf_list = [
+                EnsureChannelFirstd(keys=['image'], channel_dim='no_channel'),
+                PreprocessAnisotropy(keys=['image'], target_spacing=spacing,
+                                    model_mode=None, spatial_dims=spatial_dims),
+                DivisiblePadd(keys=['image'], k=32),
+                ToTensord(keys=['image'])
+            ]
+        else: 
+            transf_list = [
+                EnsureChannelFirstd(keys=['image'], channel_dim='no_channel'),
+                PreprocessAnisotropy(keys=['image'], target_spacing=spacing,
+                                    model_mode=None, spatial_dims=spatial_dims),
+                SpatialPadd(keys=['image'], \
+                    spatial_size=model_obj.metadata['net_metadata']['patch_size'], \
+                    method="symmetric"),
+                CastToTyped(keys=['image'], dtype=np.float32),
+                ToTensord(keys=['image'])
+            ]
+
+        data_processed = Compose(transf_list)(data)
+        img_tensor = data_processed['image']
+        
+        model_obj.model.eval()
+        with torch.no_grad():
+            if spatial_dims == 3: 
+                img_tensor = img_tensor.unsqueeze(0).to(model_obj.device)
+                output = model_obj.model(img_tensor)
+                pred_torch = torch.argmax(output, dim=1)
+                pred_vol = pred_torch[0].detach().cpu().numpy().astype(np.int8)
+
+            elif spatial_dims == 2: 
+                pred_vol = []
+                depth = img_tensor.shape[1]
+                for i in range(depth):
+                    slice_torch = img_tensor[:, i, :, :].unsqueeze(0).to(model_obj.device)
+                    output = model_obj.model(slice_torch)
+                    pred_torch = torch.argmax(output, dim=1)
+                    pred_vol.append(pred_torch[0].detach().cpu().numpy().astype(np.int8))
+            
+                pred_vol = np.stack(pred_vol, axis=0)
+        
+        return pred_vol
+    
+
+    dynamic_model = DynamicTorchModel(
+        model_id="Dafne_Custom_Model",
+        init_model_function=build_model,
+        apply_model_function=apply_network_inf,
+        weights=weights,  
+        metadata=metadata,
+        data_dimensionality=metadata['net_metadata']['spatial_dims']
+    )
+
+    return dynamic_model
+
+
 def main():
     parser = argparse.ArgumentParser(description='Pack trained model into .dafne format')
     parser.add_argument('--model_dir', type=str, required=True, help='Directory containing _params.json and .pth weights')
     parser.add_argument('--weights_name', type=str, default='_best_model.pth', help='Name of the weights file inside model_dir')
     parser.add_argument('--output', type=str, required=True, help='Output filename (e.g., my_model.dafne)')
+    parser.add_argument('--metadata', type=dict, default={}, required=True, help='Network and training metadata')
 
     args = parser.parse_args()
 
