@@ -18,7 +18,7 @@ from .pytorch_loop import pytorch_training_loop
 from .utils import count_label_mask, get_median_spacing
 from ..utils.data_fingerprint import DatasetFingerprint
 from ..utils.optimizer import get_optimal_hyperparameters
-from ..models import dafne_networks
+from ..models.dafne_networks import DafneUnetModel, DafneDynUnet
 from ..bin.create_torch_model import create_dynamic_model
 from .transforms_builder import (build_transform_list, 
                                  build_transforms_dynunet)
@@ -443,7 +443,8 @@ class TrainingWorker(QThread):
                 early_stopping=self.early_stopping,
                 n_classes=n_classes,
                 spatial_dims=spatial_dims,
-                val_roi_size=final_patch_size
+                val_roi_size=final_patch_size,
+                model_name=model_name
             )
 
             save_dir = os.path.dirname(self.save_path)

@@ -21,6 +21,7 @@ def pytorch_training_loop(model,
                           n_classes:int=2,
                           early_stopping:bool=False,
                           save_path:str=None,
+                          model_name:str=None,
                           on_epoch_end=None,
                           check_stop=None,
                           on_log=None,
@@ -105,7 +106,8 @@ def pytorch_training_loop(model,
                 if save_path:
                     try: 
                         save_dir = os.path.dirname(save_path)
-                        best_model_path = os.path.join(save_dir, '_best_model.pth')
+                        filename = f"{model_name}_best_model.pth" if model_name else "_best_model.pth"
+                        best_model_path = os.path.join(save_dir, filename)
                         torch.save(model.state_dict(), best_model_path)
                         
                         if on_log: 
