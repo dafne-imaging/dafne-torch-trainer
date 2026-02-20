@@ -28,7 +28,7 @@ def init_network():
     '''
     Inizialize dafne unet network 
     '''
-    from dafne_models.models.dafne_network import DafneUnetModel, DafneDynUnet
+    from ..models.dafne_networks import DafneUnetModel, DafneDynUnet
 
     if CONFIG['USE_DYNAMIC']:
         # Ricostruzione DynUNet
@@ -123,14 +123,17 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
     }
 
     def build_model():
-        from dafne_models.models.dafne_network import DafneUnetModel, DafneDynUnet
+        from ..models.dafne_networks import DafneUnetModel, DafneDynUnet
 
         if metadata['net_metadata']['use_dynamic']:
             return DafneDynUnet(
+                spatial_dims=metadata['net_metadata']['spatial_dims'],
                 in_channels=metadata['net_metadata']['in_channels'],
                 out_channels=metadata['net_metadata']['out_channels'],
                 kernel_size=metadata['net_metadata']['kernels'],
-                strides=metadata['net_metadata']['strides']
+                strides=metadata['net_metadata']['strides'],
+                norm_name=("INSTANCE", {"affine": True}),
+                deep_supervision=False
             )
         else:
             return DafneUnetModel(

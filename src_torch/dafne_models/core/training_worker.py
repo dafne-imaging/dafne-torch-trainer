@@ -269,7 +269,7 @@ class TrainingWorker(QThread):
         
         if kernels and strides:
             patch_size, auto_batch_size = get_optimal_hyperparameters(
-                    data_shape, spatial_dims=3
+                    median_shape, spatial_dims=3
                 )
             final_patch_size = patch_size
 
