@@ -1,3 +1,4 @@
+from monai.handlers import ParamSchedulerHandler
 import os
 import torch
 import random as rd
@@ -73,6 +74,9 @@ def pytorch_training_loop(model,
             AsDiscrete(to_onehot=n_classes)
         ])
 
+        if torch.cuda.is_available():
+            del_from_gpu(inputs, targets)
+
         with torch.no_grad():
             for batch in valid_dataloader:
                 if check_stop is not None and check_stop():
@@ -121,6 +125,9 @@ def pytorch_training_loop(model,
                 if counter >= PATIENT:
                     on_log(f'Training interrupted because of early stopping. Model saved in {save_path}') 
                     break
+            
+            if torch.cuda.is_available():
+                del_from_gpu(val_output, val_mask, val_preds, val_masks)
                 
         #take random valid image of batch from random valid dataloader
         dataset = valid_dataloader.dataset
@@ -157,6 +164,10 @@ def pytorch_training_loop(model,
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
+    # delete tensors and model from gpu memory
+    if torch.cuda.is_available():
+            del_from_gpu(model, val_output, val_mask, val_preds, val_masks)
+
 
 def valid_on_batch_3d(image_batch, model, val_roi_size):
     '''
@@ -172,3 +183,11 @@ def valid_on_batch_3d(image_batch, model, val_roi_size):
         overlap=0.25,
         predictor=model
     )
+
+def del_from_gpu(*model_params):
+    for params in model_params:
+        del params
+    
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()

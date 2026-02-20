@@ -28,7 +28,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def __init__(self, parent=None):
         super(ModelTrainer, self).__init__(parent)
         self.setupUi(self) #load widget in UI system
-
+        monitor_dim = QtWidgets.QDesktopWidget().availableGeometry()
+        width = monitor_dim.width() * 0.7
+        height = monitor_dim.height() * 0.7
+        self.resize(int(width), int(height))
+        x = (monitor_dim.width() - width) // 2
+        y = (monitor_dim.height() - height) // 2
+        self.move(int(x), int(y))
         self.setWindowTitle('Dafne Model Trainer (PyTorch Backend)')
         
         self.verticalLayout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
@@ -203,7 +209,9 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     
     def _scan_group_files(self, folder_path, extension):
         '''
-        Scan input folder by the user 
+        Scan input folder by the user recursively to group files by their parent directory. 
+        This is designed for 3D datasets where each subfolder represents a single volume or patient 
+        containing multiple slice files.
         
         Example of input folder: 
         - .npz_folder
