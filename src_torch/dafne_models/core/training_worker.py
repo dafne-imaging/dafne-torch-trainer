@@ -166,6 +166,8 @@ class TrainingWorker(QThread):
         self.model_params['data_shape'] = median_shape
         self.model_params['median_spacing'] = median_spacing
         self.model_params['spatial_dims'] = spatial_dims
+        self.model_params['in_channels'] = self.model_params.get('in_channels', 1)
+        self.model_params['out_channels'] = self.model_params.get('n_classes', 2)
 
         # dynamic mode
         if use_dynamic and spatial_dims == 3:
@@ -386,6 +388,7 @@ class TrainingWorker(QThread):
             
             n_classes = count_label_mask(data_list=self.file_list)
             self.model_params['n_classes'] = n_classes
+            self.model_params['out_channels'] = n_classes
 
             augm_params = self.train_params.get('augmentation', {}) #read augmentation parameters
             
@@ -461,7 +464,7 @@ class TrainingWorker(QThread):
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
                 n_classes=n_classes,
-                spatial_dims=self.model_params['patch_size'],
+                spatial_dims=self.model_params['spatial_dims'],
                 val_roi_size=self.model_params['patch_size'],
                 model_name=self.model_params['model_name']
             )
@@ -514,9 +517,9 @@ class TrainingWorker(QThread):
             '''
 
             #save model, weights and metadata in .dafne format
-            weights_path = os.path.join(save_dir, f'{model_name}_best_model.pth')
+            weights_path = os.path.join(save_dir, f'{self.model_params.get("model_name", "unet")}_best_model.pth')
             best_weights = torch.load(weights_path, map_location='cpu')
-            output_path = os.path.join(save_dir, f'{model_name}_final_model.dafne')
+            output_path = os.path.join(save_dir, f'{self.model_params.get("model_name", "unet")}_final_model.dafne')
             self.sig_status.emit("Packaging the model into .dafne format...")
             with open(output_path, 'wb') as f:
                 create_dynamic_model(weights=best_weights, net_metadata=save_params, train_metadata=memory_buffer).dump(f)
