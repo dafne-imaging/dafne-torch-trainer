@@ -14,6 +14,8 @@ from PyQt5.QtCore import QThread, pyqtSignal
 
 from sklearn.model_selection import train_test_split
 
+from dafne_dl.DynamicTorchModel import DynamicTorchModel
+from .lora.lora_models import LoRAModel
 from .pytorch_loop import pytorch_training_loop
 from .utils import count_label_mask, get_median_spacing
 from ..utils.data_fingerprint import DatasetFingerprint
@@ -56,11 +58,11 @@ class TrainingWorker(QThread):
                  file_list:list,
                  model_params:dict,
                  train_params:dict, 
-                 pretrained_weights:str=None, #optional pretrained weights path
-                 pretrained_json_params:str=None, #optional pretrained json params path
+                 pretrained_model_path:str=None, #.dafne file path
                  save_path:str=None,
                  early_stopping:bool=False,
                  dyn_model_params:dict=None,
+                 adaptation_params:dict=None,
                  ):
         
         super().__init__()
@@ -71,12 +73,12 @@ class TrainingWorker(QThread):
         self.dyn_unet_params = dyn_model_params
         self.train_params = train_params
         self.save_path = save_path
+        self.adaptation_params = adaptation_params
 
         self.is_running = True
         self.early_stopping = early_stopping
 
-        self.pretrained_weights = pretrained_weights
-        self.pretrained_json_params = pretrained_json_params
+        self.pretrained_model_path = pretrained_model_path
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -119,34 +121,31 @@ class TrainingWorker(QThread):
         Save model params in json file
         '''
     
-    def _setup_model(self, model_name, n_classes, net_params:dict):
+    def _setup_model(self):
         '''
-        Setup model
+        Setup model for training model from scratch
         
         :param self
-        :param model_name: model name
-        :param n_classes: number of classes
-        :param net_params: model parameters
         '''
         
-        if model_name == 'unet':
-            return DafneUnetModel(spatial_dims=net_params.get('spatial_dims', 2),
-                                n_levels=net_params.get('n_levels', 5),
-                                kernel_size=net_params.get('kernel_size', 3),
-                                out_channels=n_classes,
-                                in_channels=net_params.get('in_channels', 1))
-        elif model_name == 'dynunet':
-            return DafneDynUnet(spatial_dims = 3,
-                                in_channels=net_params.get('in_channels', 1),
-                                out_channels=n_classes,
-                                kernel_size=net_params.get('kernels'),
-                                strides=net_params.get('strides'),
+        if self.model_params['model_name'] == 'unet':
+            return DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
+                                n_levels=self.model_params.get('n_levels', 5),
+                                kernel_size=self.model_params.get('kernel_size', 3),
+                                out_channels=self.model_params['n_classes'],
+                                in_channels=self.model_params.get('in_channels', 1))
+        elif self.model_params['model_name'] == 'dynunet':
+            return DafneDynUnet(spatial_dims = self.model_params.get('spatial_dims', 3),
+                                in_channels=self.model_params.get('in_channels', 1),
+                                out_channels=self.model_params['n_classes'],
+                                kernel_size=self.model_params.get('kernels'),
+                                strides=self.model_params.get('strides'),
                                 norm_name=("INSTANCE", {"affine": True}),
                                 deep_supervision=False)
         else:
-            raise ValueError(f'Model {model_name} not found')
+            raise ValueError(f'Model {self.model_params["model_name"]} not found')
 
-    def _setup_training(self, n_classes:int):
+    def _setup_training(self):
         '''
         Setup training parameters
         It depends on the networks parameters
@@ -158,34 +157,35 @@ class TrainingWorker(QThread):
         augm_params = self.train_params.get('augmentation', {})
         batch_size = self.train_params.get('batch_size', 2)
 
-        model_name = None
-        kernels = None
-        strides = None
-
-        fingerprint = DatasetFingerprint(self.file_list, spatial_dims=3)
+        fingerprint = DatasetFingerprint(self.file_list, spatial_dims=spatial_dims)
         median_spacing = fingerprint.data_spacing
         median_shape = fingerprint.data_shape
+       
+        self.model_params['kernels'] = None
+        self.model_params['strides'] = None
+        self.model_params['data_shape'] = median_shape
+        self.model_params['median_spacing'] = median_spacing
+        self.model_params['spatial_dims'] = spatial_dims
 
         # dynamic mode
         if use_dynamic and spatial_dims == 3:
             self.sig_status.emit("Dynamic Mode: Analyzing Dataset Fingerprint...")
 
-            patch_size, auto_batch_size = get_optimal_hyperparameters(
-                median_shape, spatial_dims=3
+            patch_size, batch_size = get_optimal_hyperparameters(
+                median_shape, spatial_dims=spatial_dims
             )
             final_patch_size = patch_size
             
-            self.sig_status.emit(f"Auto-Config: Patch={patch_size}, Batch={auto_batch_size}")
+            self.sig_status.emit(f"Auto-Config: Patch={patch_size}, Batch={batch_size}")
             
+            model_name = 'dynunet'
+            self.model_params['model_name'] = model_name
             kernels, strides = fingerprint.get_kernel_and_strides(patch_size)
+
             self.model_params['kernels'] = kernels
             self.model_params['strides'] = strides
-            self.model_params['data_shape'] = median_shape
-            self.model_params['median_spacing'] = median_spacing
 
-            model_name = 'dynunet'
-
-            model = self._setup_model(model_name, n_classes, self.model_params).to(device=self.device)
+            model = self._setup_model().to(device=self.device)
             
             train_transforms =  build_transforms_dynunet(
                 keys=['image', 'mask'],
@@ -203,73 +203,104 @@ class TrainingWorker(QThread):
                 augm_params=augm_params
             )
 
-            batch_size = auto_batch_size
-
         else:
             self.sig_status.emit("Classic Mode: Using Standard U-Net")
             
             final_patch_size = (16, 96, 96)
-            fingerprint = DatasetFingerprint(self.file_list, spatial_dims=3)
-            median_spacing = fingerprint.data_spacing
 
             model_name = 'unet'
-
-            model = self._setup_model(model_name, n_classes, self.model_params).to(device=self.device)
+            self.model_params['model_name'] = model_name
+            self.model_params['data_shape'] = median_shape
+            
+            model = self._setup_model().to(device=self.device)
             
             train_transforms = build_transform_list(['filepath'],
                                                 median_spacing,
                                                 True,
                                                 augm_params,
-                                                spatial_dims)
+                                                self.model_params['spatial_dims'])
 
             valid_transforms = build_transform_list(['filepath'],
                                                     median_spacing,
                                                     False,
                                                     augm_params,
-                                                    spatial_dims)
+                                                    self.model_params['spatial_dims'])
         
-        return model, train_transforms, valid_transforms, batch_size, final_patch_size, model_name, \
-            kernels, strides, median_spacing, median_shape
+        self.model_params['batch_size'] = batch_size
+        self.model_params['patch_size'] = final_patch_size
+        
+        return model, train_transforms, valid_transforms
 
 
-
-    def _setup_fine_tuning(self, net_params:dict, model_weights_path:str, 
+    def _save_model_params(self):
+        # here save params dictionary to json file    
+        return
+    
+    def _setup_fine_tuning(self, 
+                            dyn_torch_model_obj:DynamicTorchModel,
+                            percent_to_freeze:float,
+                            lora_config:dict,
                             n_classes:int,
-                            percent_to_freeze:float=None,
                             ) -> None:
         '''
         Setup fine tuning parameters
         It depends on the networks parameters
         
-        :param net_params: model parameters read from json file
-        :param model_weights_path: path to pretrained weights
-        :param n_classes: number of classes
+        :param dynamic_torch_model: dynamic torch model from which retrive model and metadata
+        :param n_classes: number of classes for the actual model
+        :param percent_to_freeze: percent of layers to freeze
         '''
-        kernels, strides = net_params.get('kernels'), net_params.get('strides') \
-            if isinstance(net_params.get('kernels'), list) and isinstance(net_params.get('strides'), list) \
-                else (None, None) #get kernels and strides if dynunet
-        
-        # check if model is dynunet, define and load model
-        if kernels and strides:
-            model = self._setup_model('dynunet', n_classes, net_params).to(self.device)
-            model.load_state_dict(torch.load(model_weights_path), strict=False)
-        else:
-            model = self._setup_model('unet', n_classes, net_params).to(self.device)
-            model.load_state_dict(torch.load(model_weights_path), strict=False)
+        try:
+            model = dyn_torch_model_obj.model # get model object (ex. dynunet, unet, etc.)
+            net_params = dyn_torch_model_obj.metadata['net_metadata'] # get net params
+        except Exception as e:
+            raise ValueError(f'Error loading model or pretrained weights: {e}')
 
-        if percent_to_freeze is not None:
+        # update output channels if needed
+        original_n_classes = net_params.get('out_channels', None) #read original model number of classes
+        if original_n_classes != n_classes:
+            model.update_output_channels(n_classes)
+            model.to(self.device)
+            self.model_params['out_channels'] = n_classes
+            self.sig_status.emit(f"Updated model output channels from {original_n_classes} to {n_classes}")
+        
+        if lora_config is not None:
+            if not isinstance(lora_config, dict):
+                raise ValueError('Invalid type! The lora_config should be a dictionary')
+            
+            model = LoRAModel(model, lora_config)
+            model.enable_adapter() #enable lora adapters
+            model.to(self.device)
+    
+        if percent_to_freeze is not None and lora_config is None:
             self.freeze_layers(model, percent_to_freeze) #freeze layers and de-freeze norm and bn layers
         
-        final_patch_size = (16, 96, 96)
-        model_name = net_params.get('model_name', 'unet')
+        final_patch_size = net_params.get('patch_size', (16, 96, 96)) #read original model patch size
+        self.model_params['patch_size'] = final_patch_size #update model params
+
+        model_name = net_params.get('model_name', 'unet') #read original model name
+        self.model_params['model_name'] = model_name #update model params
+
         median_spacing = net_params.get('median_spacing', (1.0, 1.0, 1.0)) #read original model spacing
-        median_shape = net_params.get('data_shape', None)
-        augm_params = self.train_params.get('augmentation', {})
-        batch_size = self.train_params.get('batch_size', 2)
+        self.model_params['median_spacing'] = median_spacing #update model params
+
+        median_shape = net_params.get('data_shape', None) #read original model shape
+        self.model_params['data_shape'] = median_shape #update model params
+
+        augm_params = self.train_params.get('augmentation', {}) #read augmentation parameters
+        batch_size = self.train_params.get('batch_size', 2) #read batch size
         
-        if kernels and strides:
+        kernels = net_params.get('kernels', None) #read original model kernels
+        strides = net_params.get('strides', None) #read original model strides
+        self.model_params['kernels'] = kernels #update model kernels
+        self.model_params['strides'] = strides #update model strides
+        
+        spatial_dims = net_params.get('spatial_dims', 2) #read spatial dimensions
+        self.model_params['spatial_dims'] = spatial_dims #update model spatial dims
+        
+        if net_params.get('use_dynamic'):
             patch_size, auto_batch_size = get_optimal_hyperparameters(
-                    median_shape, spatial_dims=3
+                    median_shape, spatial_dims=spatial_dims
                 )
             final_patch_size = patch_size
 
@@ -306,12 +337,11 @@ class TrainingWorker(QThread):
                                                     augm_params,
                                                     spatial_dims)
 
-        return model, train_transforms, valid_transforms, batch_size, final_patch_size, model_name, \
-            kernels, strides, median_spacing, median_shape
-    
+        self.model_params['out_channels'] = n_classes
+        self.train_params['batch_size'] = batch_size
+        
+        return model, train_transforms, valid_transforms
 
-    def apply_lora(self):
-        return
 
     def freeze_layers(self, model, degree: float) -> None:
         '''
@@ -352,63 +382,52 @@ class TrainingWorker(QThread):
             self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...) in {self.file_list}")
             
             # split dataset into train and validation
-            model_name = None
-            kernels = None
-            strides = None
-            median_shape = None
-            final_patch_size = (16, 96, 96)
             train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
             
-            #n_classes = count_label_mask(train_list, spatial_dims=self.model_params.get('spatial_dims', 2))
-            # define model that has be trained
-            # this is an example of unet model
-            spatial_dims = self.model_params.get('spatial_dims', 2)
-            use_dynamic = self.model_params.get('use_dynamic', False)
-            augm_params = self.train_params.get('augmentation', {})
-            median_spacing = get_median_spacing(self.file_list, spatial_dims)
-
-            spatial_dims = self.model_params.get('spatial_dims', 3)
             n_classes = count_label_mask(data_list=self.file_list)
+            self.model_params['n_classes'] = n_classes
+
+            augm_params = self.train_params.get('augmentation', {}) #read augmentation parameters
             
             #fine-tuning mode
-            if self.pretrained_weights and self.pretrained_json_params:
+            if self.pretrained_model_path:
                 self.sig_status.emit("Fine-tuning mode")
 
-                with open (self.pretrained_json_params, 'r') as f: 
-                    net_params = json.load(f)
+                loaded_obj = DynamicTorchModel.Load(self.pretrained_model_path)
+                model = loaded_obj.model
 
                 # Get percent_to_freeze from train_params if available
                 percent_to_freeze = self.train_params.get('percent_to_freeze', None)
+                lora_config = self.train_params.get('lora_config', None)
 
-                model, train_transforms, valid_transforms, \
-                    batch_size, final_patch_size, model_name, \
-                    kernels, strides, median_spacing, median_shape = \
-                        self._setup_fine_tuning(net_params, self.pretrained_weights, n_classes, percent_to_freeze)               
+                model, train_transforms, valid_transforms = \
+                        self._setup_fine_tuning(loaded_obj, 
+                                                percent_to_freeze,
+                                                lora_config,
+                                                n_classes)               
 
             else: 
-                model, train_transforms, valid_transforms, \
-                    batch_size, final_patch_size, model_name, \
-                    kernels, strides, median_spacing, median_shape = \
-                        self._setup_training(n_classes)               
+                model, train_transforms, valid_transforms = \
+                    self._setup_training()               
 
 
             train_dataset = DafneDataset(data_files=train_list,
                                         augm_params=augm_params,
                                         train_transform=True,
-                                        spatial_dims=spatial_dims,
+                                        spatial_dims=self.model_params.get('spatial_dims', 2),
                                         external_transforms=train_transforms
                                         )
             valid_dataset = DafneDataset(data_files=valid_list,
                                         augm_params={},
                                         train_transform=False,
-                                        spatial_dims=spatial_dims,
+                                        spatial_dims=self.model_params.get('spatial_dims', 2),
                                         external_transforms=valid_transforms
                                         )
             
             # batch size must be choose by user before train
             train_dataloader = DataLoader(train_dataset, 
                                           num_workers=8, 
-                                          batch_size=batch_size, 
+                                          batch_size=self.model_params.get('batch_size', 1), 
                                           shuffle=True,
                                           collate_fn=pad_list_data_collate)
             
@@ -442,9 +461,9 @@ class TrainingWorker(QThread):
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
                 n_classes=n_classes,
-                spatial_dims=spatial_dims,
-                val_roi_size=final_patch_size,
-                model_name=model_name
+                spatial_dims=self.model_params['patch_size'],
+                val_roi_size=self.model_params['patch_size'],
+                model_name=self.model_params['model_name']
             )
 
             save_dir = os.path.dirname(self.save_path)
@@ -455,22 +474,22 @@ class TrainingWorker(QThread):
 
             # to be added: labels' name, norm_params, version
             save_params = {
-                'model_name': model_name,
+                'model_name': self.model_params.get('model_name', 'unet'),
                 'train_list': train_list,
                 'valid_list': valid_list,
                 'spatial_dims': self.model_params.get('spatial_dims', 2),
                 'n_levels': self.model_params.get('n_levels', 5),
                 'kernel_size': self.model_params.get('kernel_size', 3),
-                'out_channels': n_classes,
+                'out_channels': self.model_params.get('out_channels', 1),
                 'in_channels': self.model_params.get('in_channels', 1),
-                'median_spacing': median_spacing.tolist() if isinstance(median_spacing, np.ndarray) else median_spacing,
-                'use_dynamic': use_dynamic,
-                'kernels': kernels if model_name == 'dynunet' else None,
-                'strides': strides if model_name == 'dynunet' else None,
-                'batch_size': batch_size,
+                'median_spacing': self.model_params.get('median_spacing', None),
+                'use_dynamic': self.model_params.get('use_dynamic', False),
+                'kernels': self.model_params.get('kernels', None),
+                'strides': self.model_params.get('strides', None),
+                'batch_size': self.train_params.get('batch_size', 1),
                 'learning_rate': self.train_params.get('learning_rate', 0.001),
-                'patch_size': final_patch_size,
-                'data_shape': median_shape.tolist() if isinstance(median_shape, np.ndarray) else median_shape
+                'patch_size': self.model_params.get('patch_size', None),
+                'data_shape': self.model_params.get('data_shape', None)
             }
 
             # take random images from train and validation list to save memory buffer

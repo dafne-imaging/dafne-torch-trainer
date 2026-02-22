@@ -76,7 +76,7 @@ class LoRALinearLayer(nn.Module):
         return output
     
     def _get_merged_modules(self) -> nn.Module:
-        *dim = self.base_module.weight.size()
+        dim = self.base_module.weight.size()
         out_channels, in_channels = dim
 
         new_weight = self.base_module.weight + (self.alpha / self.rank) * (self.delta_weight_B @ self.delta_weight_A)

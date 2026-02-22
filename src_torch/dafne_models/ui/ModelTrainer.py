@@ -5,6 +5,7 @@ import glob
 from ..core.training_worker import TrainingWorker
 from .ModelTrainer_Ui import Ui_ModelTrainerUI
 from .AugmentationDialog_Ui import AugmentationDialog
+from .FineTuningDialog import FineTuningDialog
 
 from PyQt5 import QtWidgets, QtGui, QtCore
 from PyQt5.QtCore import QObject, QVariant
@@ -45,11 +46,21 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.mask_paths = [] #path to masks
         self.train_params = {} #training params
         self.pretrained_path = None
+
+        # augmentation params
         self.augm_params = {'rotate':False,
                             'flip_x':False,
                             'flip_y':False,
                             'zoom':False,
-                            'noise':False} #augm params
+                            'noise':False}
+        
+        # fine-tuning and adaptation params
+        self.adaptation_params = {
+            'mode': 'scratch',
+            'freeze_degree': 0.5,
+            'lora_rank': 8,
+            'lora_alpha': 16
+        }
 
         # loss caches
         self.loss_history = []
@@ -68,11 +79,11 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.train_settings_btn.clicked.connect(self.toggle_advanced_options_training)
         self.save_choose_Button.clicked.connect(self.select_save_path)
         self.augmentation_button.clicked.connect(self.open_augm_settings)
+        self.finetuning_settings_btn.clicked.connect(self.open_finetuning_settings)
         self.stop_btn.clicked.connect(self.stop_training)
 
-        self.train_mode_combo.currentIndexChanged.connect(self._on_train_mode_changes)
         self.pretrain_choose_Button.clicked.connect(self.select_pretrained_path)
-        self._on_train_mode_changes(self.train_mode_combo.currentIndex())
+        self._update_adaptation_ui_state()
 
         self.model_3d_check.toggled.connect(self._on_3d_mode_changed)
         self._on_3d_mode_changed(self.model_3d_check.isChecked())
@@ -113,11 +124,42 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self.augm_params = dialog.get_settings()
             print(f"Augmentation updated: {self.augm_params}")
     
-    def _on_train_mode_changes(self, index):
-        is_pretrained_mode = (index > 0)
+    def open_finetuning_settings(self):
+        dialog = FineTuningDialog(self, self.adaptation_params)
+        if dialog.exec_() == QDialog.Accepted:
+            self.adaptation_params = dialog.get_settings()
+            print(f"Adaptation updated: {self.adaptation_params}")
+            self._update_adaptation_ui_state()
+    
+    def _update_adaptation_ui_state(self):
+        mode = self.adaptation_params.get('mode', 'scratch')
+        is_pretrained_mode = (mode != 'scratch')
 
         self.pretrained_location_Text.setEnabled(is_pretrained_mode)
         self.pretrain_choose_Button.setEnabled(is_pretrained_mode)
+        
+        # Change button text or color to show it's configured
+        if mode == 'lora':
+            self.finetuning_settings_btn.setText("Fine-tuning (LoRA)")
+        elif mode == 'finetune':
+            self.finetuning_settings_btn.setText("Fine-tuning (Classic)")
+        else:
+            self.finetuning_settings_btn.setText("Fine-tuning Settings")
+        
+        self._update_advanced_ui_state()
+    
+    def _update_advanced_ui_state(self):
+        mode = self.adaptation_params.get('mode', 'scratch')
+        if mode == 'finetune' or mode == 'lora':
+            self.advanced_widget.setEnabled(False)
+            self.advanced_button.setEnabled(False)
+            self.train_settings_btn.setEnabled(False)
+            self.check_auto_params.setEnabled(False)
+        else:
+            self.advanced_widget.setEnabled(True)
+            self.advanced_button.setEnabled(True)
+            self.train_settings_btn.setEnabled(True)
+            self.check_auto_params.setEnabled(True)
 
     def select_pretrained_path(self) -> None:
         options = QFileDialog.Options()
@@ -266,8 +308,17 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.progressBar.setValue(percent)
     
     def start_training(self):
+        #check if data are loaded
         if not self.image_paths:
             QMessageBox.warning(self, 'Input Error', "No data loaded. Please select data first")
+            return
+        
+        #check if pretrained model is selected for finetuning or lora
+        if (self.adaptation_params.get('mode', 'scratch') == 'finetune' \
+            or self.adaptation_params.get('mode', 'scratch') == 'lora') \
+                and not self.pretrained_path:
+            QMessageBox.warning(self, 'Input Error', "No pretrained model selected. Please select a \
+                pretrained model")
             return
 
         self._status_btn(True)
@@ -316,12 +367,33 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             'augmentation': self.augm_params
         }
 
+        # Add adaptation parameters
+        mode = self.adaptation_params.get('mode', 'scratch')
+        if mode == 'finetune':
+            train_params['percent_to_freeze'] = self.adaptation_params.get('freeze_degree', 0.5)
+            train_params['lora_config'] = None
+        elif mode == 'lora':
+            train_params['percent_to_freeze'] = None
+            # Default to all layers for now
+            train_params['lora_config'] = {
+                '.*': {
+                    'rank': self.adaptation_params.get('lora_rank', 8),
+                    'alpha': self.adaptation_params.get('lora_alpha', 16)
+                }
+            }
+        else: # scratch
+            train_params['percent_to_freeze'] = None
+            train_params['lora_config'] = None
+            self.pretrained_path = None # Ensure no pretrained path is used
+
         self.worker = TrainingWorker(
             file_list=self.image_paths,
             model_params=model_params,
             train_params=train_params,
+            pretrained_model_path=self.pretrained_path,
             save_path=self.save_path,
-            early_stopping=early_stopping
+            early_stopping=early_stopping,
+            adaptation_params=self.adaptation_params
         )
 
         self.worker.sig_update_plot.connect(self.update_plots)

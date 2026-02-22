@@ -1,6 +1,3 @@
-import os
-import sys
-
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox
 
 class AugmentationDialog(QDialog):

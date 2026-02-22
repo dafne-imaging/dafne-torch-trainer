@@ -1,5 +1,5 @@
-import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import monai.networks.nets as monai_nets
 
 # just defined a model class: Unet from MONAI framework
@@ -22,6 +22,9 @@ class DafneUnetModel(nn.Module):
         # first level no downsampling, then downsample by factor 2
         strides = tuple([1] + [2] * (n_levels - 1))
 
+        self.spatial_dims = spatial_dims
+        self.out_channels = out_channels
+
         self.unet_model = monai_nets.Unet(
             spatial_dims = spatial_dims,
             in_channels = in_channels,
@@ -35,6 +38,13 @@ class DafneUnetModel(nn.Module):
 
     def forward(self, x):
         return self.unet_model(x)
+    
+    def update_output_channels(self, n_classes:int):
+        conv_fn = getattr(nn, f"Conv{self.spatial_dims}d")
+        in_channels = self.unet_model.channels[-1]
+        self.unet_model.out_channels = n_classes
+        self.unet_model.model[-1].conv = conv_fn(in_channels, n_classes, kernel_size=1)
+        self.out_channels = n_classes
     
 # here users can define other model classes if needed
 
@@ -51,6 +61,9 @@ class DafneDynUnet(nn.Module):
                 ):
         
         super().__init__()
+        
+        self.spatial_dims = spatial_dims
+        self.out_channels = out_channels
 
         self.dyn_unet = monai_nets.DynUnet(
             spatial_dims=spatial_dims,
@@ -66,3 +79,9 @@ class DafneDynUnet(nn.Module):
     
     def forward(self, x):
         return self.dyn_unet(x)
+    
+    def update_output_channels(self, n_classes:int):
+        conv_fn = getattr(nn, f"Conv{self.spatial_dims}d")
+        in_channels = self.dyn_unet.heads[0].in_channels
+        self.dyn_unet.heads[0] = conv_fn(in_channels, n_classes, kernel_size=1)
+        self.out_channels = n_classes

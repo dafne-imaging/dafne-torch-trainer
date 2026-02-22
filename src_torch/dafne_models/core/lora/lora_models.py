@@ -40,7 +40,7 @@ class LoRAModel(nn.Module):
                         lora_module = LoRALinearLayer(module, config)
                         self._recursive_setattr(self.base_model, module_name, lora_module)
                     else: 
-                        raise AssertionError('Invalid Target Module Type! Only Conv and Linear layers are supported')
+                        pass
 
     def _recursive_setattr(self, obj, attr_path, value):
         parts = attr_path.split('.')
