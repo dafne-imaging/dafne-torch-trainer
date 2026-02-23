@@ -167,10 +167,12 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self.advanced_widget.setEnabled(False)
             self.advanced_button.setEnabled(False)
             self.check_auto_params.setEnabled(False)
+            self.model_3d_check.setEnabled(False)
         else:
             self.advanced_widget.setEnabled(True)
             self.advanced_button.setEnabled(True)
             self.check_auto_params.setEnabled(True)
+            self.model_3d_check.setEnabled(True)
         
         self.train_settings_btn.setEnabled(True)
 
@@ -449,8 +451,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self.augmentation_button, self.fit_Button, 
             self.preprocess_Button, self.levels_spin,
             self.epochs_spin, self.lr_spin, self.batch_spin,
-            self.finetuning_settings_btn, self.pretrain_choose_Button,
-            self.model_location_Text, self.pretrained_location_Text
+            self.finetuning_settings_btn, self.pretrain_choose_Button
         ]
 
         for btn in widgets_to_toggle:
@@ -531,15 +532,34 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_loss.clear()
         self.ax_preview.clear()
 
+        # Clear paths and data on stop
+        self._clear_paths_and_data()
+
         QMessageBox.information(self, "Stopped", "Training stopped correctly.")
+
+    def _clear_paths_and_data(self):
+        """Reset all paths and internal data lists"""
+        self.image_paths = []
+        self.mask_paths = None
+        self.save_path = None
+        self.pretrained_path = None
         
-    
+        self.location_Text.clear()
+        self.model_location_Text.clear()
+        self.pretrained_location_Text.clear()
+        
+        self.fit_Button.setEnabled(False)
+        
     def on_training_finished(self):
         self._status_btn(False)
         self.progressBar.setValue(100)
         self.progress_Label.setText('Training completed!')
+        
+        # Clear paths and data on finish
+        self._clear_paths_and_data()
+        
         QMessageBox.information(self, 'Finished!', "The model was trained successfully")
-
+    
     def _reset_ui_state(self):
         self.fit_Button.setEnabled(True)
         self.choose_Button.setEnabled(True)

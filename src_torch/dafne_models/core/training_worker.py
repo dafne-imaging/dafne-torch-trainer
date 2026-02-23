@@ -478,10 +478,6 @@ class TrainingWorker(QThread):
             )
 
             save_dir = os.path.dirname(self.save_path)
-            '''
-            json_path = os.path.join(save_dir, f'{model_name}_params.json')
-            json_memory_buffer_path = os.path.join(save_dir, f'{model_name}_memory_buffer.json')
-            '''
 
             # to be added: labels' name, norm_params, version
             save_params = {
@@ -510,20 +506,6 @@ class TrainingWorker(QThread):
                 'train_path_list': [os.path.abspath(p) for p in rd.sample(train_list, len(train_list)//20)],
                 'valid_path_list': [os.path.abspath(p) for p in rd.sample(valid_list, len(valid_list)//20)]
             }
-
-            '''
-            try:
-                with open(json_path, "w") as json_data: 
-                    json.dump(save_params, json_data, indent=4)
-            except Exception as e:
-                print(f"Error saving params: {e}")
-            
-            try:
-                with open(json_memory_buffer_path, "w") as json_data:
-                    json.dump(memory_buffer, json_data, indent=4)
-            except Exception as e:
-                print(f"Error saving memory buffer: {e}")
-            '''
 
             #save model, weights and metadata in .dafne format
             weights_path = os.path.join(save_dir, f'{self.model_params.get("model_name", "unet")}_best_model.pth')
