@@ -168,6 +168,7 @@ class TrainingWorker(QThread):
         self.model_params['spatial_dims'] = spatial_dims
         self.model_params['in_channels'] = self.model_params.get('in_channels', 1)
         self.model_params['out_channels'] = self.model_params.get('n_classes', 2)
+        self.model_params['n_levels'] = self.model_params.get('n_levels', 5)
 
         # dynamic mode
         if use_dynamic and spatial_dims == 3:
@@ -299,8 +300,13 @@ class TrainingWorker(QThread):
         
         spatial_dims = net_params.get('spatial_dims', 2) #read spatial dimensions
         self.model_params['spatial_dims'] = spatial_dims #update model spatial dims
+
+        use_dynamic = net_params.get('use_dynamic', False) #read use dynamic
+        self.model_params['use_dynamic'] = use_dynamic #update model use dynamic
+
+        self.model_params['n_levels'] = net_params.get('n_levels', 5) #read n_levels
         
-        if net_params.get('use_dynamic'):
+        if use_dynamic:
             patch_size, auto_batch_size = get_optimal_hyperparameters(
                     median_shape, spatial_dims=spatial_dims
                 )

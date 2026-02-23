@@ -81,7 +81,12 @@ class DafneDynUnet(nn.Module):
         return self.dyn_unet(x)
     
     def update_output_channels(self, n_classes:int):
-        conv_fn = getattr(nn, f"Conv{self.spatial_dims}d")
-        in_channels = self.dyn_unet.heads[0].in_channels
-        self.dyn_unet.heads[0] = conv_fn(in_channels, n_classes, kernel_size=1)
+        self.dyn_unet.out_channels = n_classes
+        self.dyn_unet.output_block = \
+            self.dyn_unet.get_output_block(0)
+
+        if hasattr(self.dyn_unet, 'deep_supervision') and self.dyn_unet.deep_supervision:
+            self.dyn_unet.deep_supervision_heads = \
+                self.dyn_unet.get_deep_supervision_heads()
+        
         self.out_channels = n_classes
