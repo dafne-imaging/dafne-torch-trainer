@@ -93,11 +93,18 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
         'train_metadata': train_metadata
     }
 
+    clean_params = {}
+    for k, v in net_metadata.items():
+        if hasattr(v, 'tolist'): # Se è un array numpy, lo converte in lista
+            clean_params[k] = v.tolist()
+        else:
+            clean_params[k] = v
+
     # BAKE METADATA INTO SOURCE (Must start at column 0 for exec)
     build_model_src = f"""
 def build_model():
     from dafne_models.models.dafne_networks import DafneUnetModel, DafneDynUnet
-    params = {repr(net_metadata)}
+    params = {repr(clean_params)}
     
     if params['use_dynamic']:
         return DafneDynUnet(
