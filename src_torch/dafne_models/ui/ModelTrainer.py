@@ -71,6 +71,10 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.save_choose_Button.setEnabled(True)
         self.preprocess_Button.setEnabled(False)
         self.train_settings_widget.setVisible(False)
+        
+        self.location_Text.setReadOnly(True)
+        self.model_location_Text.setReadOnly(True)
+        self.pretrained_location_Text.setReadOnly(True)
 
         self._init_matplotlib_canvas()
 
@@ -138,6 +142,11 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.pretrained_location_Text.setEnabled(is_pretrained_mode)
         self.pretrain_choose_Button.setEnabled(is_pretrained_mode)
         
+        # update the actual path from the text field if mode is scratch
+        if not is_pretrained_mode:
+            self.pretrained_path = None
+            self.pretrained_location_Text.clear()
+
         # Change button text or color to show it's configured
         if mode == 'lora':
             self.finetuning_settings_btn.setText("Fine-tuning (LoRA)")
@@ -199,13 +208,14 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self,
             "Choose save model path",
             "",
-            "Pytorch Model (.pth);;All files (*)",
+            "Dafne Model (*.dafne);;Pytorch Model (*.pth);;All files (*)",
             options=options
         )
 
         if filename:
-            if not filename.endswith('.pth'):
-                filename += '.pth'
+            # Add .dafne extension if no extension is provided
+            if not '.' in os.path.basename(filename):
+                filename += '.dafne'
         
         self.save_path = filename
         self.model_location_Text.setText(filename)
@@ -313,6 +323,15 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             QMessageBox.warning(self, 'Input Error', "No data loaded. Please select data first")
             return
         
+        # Update paths from text fields in case user edited them manually
+        self.save_path = self.model_location_Text.text()
+        self.pretrained_path = self.pretrained_location_Text.text()
+
+        # check if save path is provided
+        if not self.save_path:
+            QMessageBox.warning(self, 'Input Error', "Please select a save path for the model")
+            return
+
         #check if pretrained model is selected for finetuning or lora
         if (self.adaptation_params.get('mode', 'scratch') == 'finetune' \
             or self.adaptation_params.get('mode', 'scratch') == 'lora') \
@@ -417,11 +436,18 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self.advanced_button, self.train_settings_btn, 
             self.augmentation_button, self.fit_Button, 
             self.preprocess_Button, self.levels_spin,
-            self.epochs_spin, self.lr_spin, self.batch_spin
+            self.epochs_spin, self.lr_spin, self.batch_spin,
+            self.finetuning_settings_btn, self.pretrain_choose_Button,
+            self.model_location_Text, self.pretrained_location_Text
         ]
 
         for btn in widgets_to_toggle:
             btn.setEnabled(not active)
+        
+        # If we are stopping training, we need to respect the adaptation mode for pretrained widgets
+        if not active:
+            self._update_adaptation_ui_state()
+
         self.stop_btn.setEnabled(active)
     
     def update_status_label(self, message): 
