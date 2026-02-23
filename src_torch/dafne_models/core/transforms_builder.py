@@ -39,7 +39,7 @@ def build_transform_list(keys:list,
                 RandCropByPosNegLabeld(
                     keys=['image', 'mask'], label_key='mask',
                     spatial_size=(16, 96, 96), # Patch 3D
-                    pos=1, neg=1, num_samples=4,
+                    pos=3, neg=1, num_samples=4,
                     image_key='image', image_threshold=0
                 )
             )
@@ -121,7 +121,7 @@ def build_transforms_dynunet(keys: list,
                 keys=keys,
                 label_key="mask",
                 spatial_size=patch_size,
-                pos=1, neg=1, num_samples=1, 
+                pos=3, neg=1, num_samples=4, 
                 image_key="image", image_threshold=0,
             )
         )
