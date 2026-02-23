@@ -150,10 +150,9 @@ def pytorch_training_loop(model,
             val_pred = torch.argmax((val_pred_out), dim=1).float()
 
             dims = val_image.shape
-            if len(dims)==4: # 3D volume [B, H, W, D] - no C because of argmax
-                center = dims[1]//2
-                margin = max(1, int(center*0.1))
-                slice_idx = rd.randint(max(0, center-margin), min(center+margin, dims[1]))
+            if len(dims)==4: # 3D volume [C, D, H, W]
+                depth = dims[1]
+                slice_idx = rd.randint(int(depth * 0.1), int(depth * 0.9))
                 img_np = val_image[0, slice_idx, :, :].cpu().numpy()
                 pred_np = val_pred[0, slice_idx, :, :].cpu().numpy()
             elif len(dims)==3: # 2D images [B, H, W] - no C because of argmax
@@ -169,7 +168,14 @@ def pytorch_training_loop(model,
 
     # delete tensors and model from gpu memory
     if torch.cuda.is_available():
+        model.to('cpu')
+        try:
             del_from_gpu(model, val_output, val_mask, val_preds, val_masks)
+        except NameError:
+            # handle case where some variables might not be defined if training stopped early
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
 
 
 def valid_on_batch_3d(image_batch, model, val_roi_size):
@@ -188,9 +194,6 @@ def valid_on_batch_3d(image_batch, model, val_roi_size):
     )
 
 def del_from_gpu(*model_params):
-    for params in model_params:
-        del params
-    
     import gc
     gc.collect()
     torch.cuda.empty_cache()

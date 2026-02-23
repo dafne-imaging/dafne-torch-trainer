@@ -525,6 +525,11 @@ class TrainingWorker(QThread):
             with open(output_path, 'wb') as f:
                 create_dynamic_model(weights=best_weights, net_metadata=save_params, train_metadata=memory_buffer).dump(f)
             
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+
             if not self.is_running:
                 self.sig_stopped.emit()
             else:

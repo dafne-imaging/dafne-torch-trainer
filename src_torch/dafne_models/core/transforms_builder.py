@@ -54,7 +54,7 @@ def build_transform_list(keys:list,
                 pipeline.append(RandZoomd(keys=['image', 'mask'], prob=0.5, min_zoom=0.9, max_zoom=1.1, mode=['bilinear', 'nearest']))
             if augm_params.get('noise'):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
-
+    
             pipeline.append(ToTensord(keys=['image', 'mask']))
             
             if not train_transforms:
@@ -107,7 +107,7 @@ def build_transforms_dynunet(keys: list,
     )
     
     if train_transforms:
-        pipeline.extend([
+        pipeline.append(
             RandCropByPosNegLabeld(
                 keys=keys,
                 label_key="mask",
@@ -115,7 +115,7 @@ def build_transforms_dynunet(keys: list,
                 pos=1, neg=1, num_samples=1, 
                 image_key="image", image_threshold=0,
             )
-        ])
+        )
         
         # Augmentation (Parametriche)
         if augm_params.get('flip_x'):
@@ -128,6 +128,11 @@ def build_transforms_dynunet(keys: list,
             pipeline.append(RandZoomd(keys=keys, prob=0.3, min_zoom=0.9, max_zoom=1.1, mode=("bilinear", "nearest")))
         if augm_params.get('noise'):
             pipeline.append(RandGaussianNoised(keys=["image"], prob=0.2, std=0.05))
+
+    if not train_transforms:
+        pipeline.append(
+            SpatialPadd(keys=keys, spatial_size=patch_size, method="symmetric")
+        )
 
     pipeline.extend([
         CastToTyped(keys=keys, dtype=(np.float32, np.uint8)),
