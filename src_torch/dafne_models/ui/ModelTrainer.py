@@ -165,9 +165,9 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         options = QFileDialog.Options()
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            "Choose pretrained model path",
+            "Choose pretrained dafne model",
             "",
-            "Pytorch Model (.pth);;All files (*)",
+            "Dafne Model (.dafne);;Pytorch Model (.pth);;All files (*)",
             options=options
         )
 
@@ -427,15 +427,15 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     def update_status_label(self, message): 
         self.progress_Label.setText(message)
     
-    @QtCore.pyqtSlot(float, object, object, float, object)
-    def update_plots(self, loss, img, mask, val_loss, spacing):
+    @QtCore.pyqtSlot(float, object, object, float, object, float)
+    def update_plots(self, loss, img, mask, val_loss, spacing, best_dice):
         self.loss_history.append(loss)
         self.val_loss_history.append(val_loss)
         self.ax_loss.clear()
         self.ax_loss.plot(self.loss_history, 'r-', label='Training Loss')
         self.ax_loss.plot(self.val_loss_history, 'b-', label='Validation Loss')
         self.ax_loss.legend(loc='upper right')
-        self.ax_loss.set_title(f'Loss: {loss:.4f}')
+        self.ax_loss.set_title(f'Loss: {loss:.4f} | Best Dice: {best_dice:.4f}')
         self.ax_loss.grid(True, alpha=0.5)
 
         self.ax_preview.clear()

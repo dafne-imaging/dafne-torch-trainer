@@ -163,7 +163,7 @@ def pytorch_training_loop(model,
             # send to GUI for each epoch, the current epoch, avg_loss and rand image
             # and his model predicted mask
             if on_epoch_end:    
-                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss, img_spacing)
+                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss, img_spacing, best_val_dice_score)
        
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
