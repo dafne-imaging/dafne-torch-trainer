@@ -167,7 +167,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self,
             "Choose pretrained dafne model",
             "",
-            "Dafne Model (.dafne);;Pytorch Model (.pth);;All files (*)",
+            "Dafne Model (*.dafne);;All files (*)",
             options=options
         )
 

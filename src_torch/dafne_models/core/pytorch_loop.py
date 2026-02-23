@@ -177,6 +177,8 @@ def pytorch_training_loop(model,
             gc.collect()
             torch.cuda.empty_cache()
 
+    return float(best_val_dice_score)
+
 
 def valid_on_batch_3d(image_batch, model, val_roi_size):
     '''

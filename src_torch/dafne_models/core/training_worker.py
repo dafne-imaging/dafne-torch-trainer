@@ -396,7 +396,8 @@ class TrainingWorker(QThread):
             if self.pretrained_model_path:
                 self.sig_status.emit("Fine-tuning mode")
 
-                loaded_obj = DynamicTorchModel.Load(self.pretrained_model_path)
+                with open(self.pretrained_model_path, "rb") as f:
+                    loaded_obj = DynamicTorchModel.Load(f)
                 model = loaded_obj.model
 
                 # Get percent_to_freeze from train_params if available
@@ -450,7 +451,7 @@ class TrainingWorker(QThread):
                                  to_onehot_y=True,
                                  squared_pred=True)
 
-            pytorch_training_loop(
+            best_val_dice = pytorch_training_loop(
                 model=model,
                 optimizer=optimizer,
                 train_dataloader = train_dataloader,
@@ -479,6 +480,7 @@ class TrainingWorker(QThread):
             # to be added: labels' name, norm_params, version
             save_params = {
                 'model_name': self.model_params.get('model_name', 'unet'),
+                'best_val_dice': best_val_dice,
                 'train_list': train_list,
                 'valid_list': valid_list,
                 'spatial_dims': self.model_params.get('spatial_dims', 2),
@@ -524,6 +526,10 @@ class TrainingWorker(QThread):
             self.sig_status.emit("Packaging the model into .dafne format...")
             with open(output_path, 'wb') as f:
                 create_dynamic_model(weights=best_weights, net_metadata=save_params, train_metadata=memory_buffer).dump(f)
+            
+            # remove .pth file after packaging
+            if os.path.exists(weights_path):
+                os.remove(weights_path)
             
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
