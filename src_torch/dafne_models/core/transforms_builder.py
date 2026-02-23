@@ -56,9 +56,6 @@ def build_transform_list(keys:list,
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
     
             pipeline.append(ToTensord(keys=['image', 'mask']))
-            
-            if not train_transforms:
-                pipeline.append(DivisiblePadd(keys=['image', 'mask'], k=32, mode='edge'))
     
     else: 
         pipeline = [
@@ -102,22 +99,8 @@ def build_transforms_dynunet(keys: list,
                                                 model_mode='train' if train_transforms else None,
                                                 spatial_dims=3)
         ]
-    pipeline.append(
-        SpatialPadd(keys=keys, spatial_size=patch_size, method="symmetric")
-    )
-    
     if train_transforms:
-        pipeline.append(
-            RandCropByPosNegLabeld(
-                keys=keys,
-                label_key="mask",
-                spatial_size=patch_size,
-                pos=1, neg=1, num_samples=1, 
-                image_key="image", image_threshold=0,
-            )
-        )
-        
-        # Augmentation (Parametriche)
+        # 1. Augmentation
         if augm_params.get('flip_x'):
             pipeline.append(RandFlipd(keys=keys, prob=0.5, spatial_axis=0))
         if augm_params.get('flip_y'):
@@ -129,7 +112,21 @@ def build_transforms_dynunet(keys: list,
         if augm_params.get('noise'):
             pipeline.append(RandGaussianNoised(keys=["image"], prob=0.2, std=0.05))
 
-    if not train_transforms:
+        pipeline.append(
+            SpatialPadd(keys=keys, spatial_size=patch_size, method="symmetric")
+        )
+        
+        pipeline.append(
+            RandCropByPosNegLabeld(
+                keys=keys,
+                label_key="mask",
+                spatial_size=patch_size,
+                pos=1, neg=1, num_samples=1, 
+                image_key="image", image_threshold=0,
+            )
+        )
+    else:
+        # In validation padding is required to avoid crashing sliding_window_inference or collate
         pipeline.append(
             SpatialPadd(keys=keys, spatial_size=patch_size, method="symmetric")
         )

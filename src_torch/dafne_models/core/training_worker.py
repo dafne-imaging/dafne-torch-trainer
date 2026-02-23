@@ -381,7 +381,7 @@ class TrainingWorker(QThread):
             from .dafne_dataset import DafneDataset
 
             self.sig_status.emit(f"Training initialization on: {self.device} device")
-            self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...) in {self.file_list}")
+            self.sig_status.emit(f"Dataset loading ({len(self.file_list)} files...) in {os.path.abspath(self.file_list[0])}")
             
             # split dataset into train and validation
             train_list, valid_list = train_test_split(self.file_list, test_size=0.2, random_state=42)
