@@ -465,7 +465,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         if mask is not None: 
             masked = np.ma.masked_where(mask == 0, mask)
-            self.ax_preview.imshow(masked, cmap='autumn', alpha=0.5, aspect=pixel_aspect)
+            self.ax_preview.imshow(masked, cmap='tab20', alpha=0.5, aspect=pixel_aspect)
         
         self.ax_preview.axis('off')
         self.canvas.draw()

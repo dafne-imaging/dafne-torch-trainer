@@ -31,7 +31,7 @@ def pytorch_training_loop(model,
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
     
-    dice_metric = DiceMetric(include_background=True, reduction='mean')
+    dice_metric = DiceMetric(include_background=False, reduction='mean')
     best_val_dice_score = -float("inf")
     counter = 0
 
@@ -151,9 +151,12 @@ def pytorch_training_loop(model,
 
             dims = val_image.shape
             if len(dims)==4: # 3D volume [B, H, W, D] - no C because of argmax
-                img_np = val_image[0, dims[1]//2, :, :].cpu().numpy()
-                pred_np = val_pred[0, dims[1]//2, :, :].cpu().numpy()
-            elif len(dims)==3: # 2D images [B, H, W] - no C because of argmax
+                center = dims[1]//2
+                margin = max(1, int(center*0.1))
+                slice_idx = rd.randint(max(0, center-margin), min(center+margin, dims[1]))
+                img_np = val_image[0, slice_idx, :, :].cpu().numpy()
+                pred_np = val_pred[0, slice_idx, :, :].cpu().numpy()
+            elif len(dims)==3: # 2D images [B, H, W] - no C because of argmax
                 img_np = val_image[0].cpu().numpy()
                 pred_np = val_pred[0].cpu().numpy()
 

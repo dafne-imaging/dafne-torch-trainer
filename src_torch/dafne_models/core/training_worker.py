@@ -447,7 +447,8 @@ class TrainingWorker(QThread):
             # define loss criterion
             criterion = DiceCELoss(include_background=False, 
                                  softmax=True,
-                                 to_onehot_y=True)
+                                 to_onehot_y=True,
+                                 squared_pred=True)
 
             pytorch_training_loop(
                 model=model,
