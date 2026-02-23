@@ -72,9 +72,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.preprocess_Button.setEnabled(False)
         self.train_settings_widget.setVisible(False)
         
+        # Set path fields as permanently read-only and disabled
         self.location_Text.setReadOnly(True)
+        self.location_Text.setEnabled(False)
         self.model_location_Text.setReadOnly(True)
+        self.model_location_Text.setEnabled(False)
         self.pretrained_location_Text.setReadOnly(True)
+        self.pretrained_location_Text.setEnabled(False)
 
         self._init_matplotlib_canvas()
 
@@ -139,7 +143,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         mode = self.adaptation_params.get('mode', 'scratch')
         is_pretrained_mode = (mode != 'scratch')
 
-        self.pretrained_location_Text.setEnabled(is_pretrained_mode)
+        # The text field remains disabled (read-only), only the button is toggled
         self.pretrain_choose_Button.setEnabled(is_pretrained_mode)
         
         # update the actual path from the text field if mode is scratch
@@ -162,13 +166,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if mode == 'finetune' or mode == 'lora':
             self.advanced_widget.setEnabled(False)
             self.advanced_button.setEnabled(False)
-            self.train_settings_btn.setEnabled(False)
             self.check_auto_params.setEnabled(False)
         else:
             self.advanced_widget.setEnabled(True)
             self.advanced_button.setEnabled(True)
-            self.train_settings_btn.setEnabled(True)
             self.check_auto_params.setEnabled(True)
+        
+        self.train_settings_btn.setEnabled(True)
 
     def select_pretrained_path(self) -> None:
         options = QFileDialog.Options()
@@ -228,6 +232,9 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if not folder_path:
             return
         
+        self.image_paths = []
+        self.mask_paths = None
+        
         self.location_Text.setText(folder_path)
         extensions = ['.npz']
 
@@ -242,8 +249,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.mask_paths = None
 
         self.fit_Button.setEnabled(True)
-
-        QMessageBox.information(self, "Data loaded successfully", f"Found {len(found_files)} data")
+        
+        if self.model_3d_check.isChecked():
+            total_volumes = len(found_files)
+            total_files = sum(len(vol) for vol in found_files)
+            QMessageBox.information(self, "Data loaded successfully", f"Found {total_volumes} volumes (containing {total_files} total files)")
+        else:
+            QMessageBox.information(self, "Data loaded successfully", f"Found {len(found_files)} data files")
 
     def _scan_directory(self, folder_path, extensions):
         found_files = []

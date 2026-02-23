@@ -528,7 +528,12 @@ class TrainingWorker(QThread):
             #save model, weights and metadata in .dafne format
             weights_path = os.path.join(save_dir, f'{self.model_params.get("model_name", "unet")}_best_model.pth')
             best_weights = torch.load(weights_path, map_location='cpu')
-            output_path = os.path.join(save_dir, f'{self.model_params.get("model_name", "unet")}_final_model.dafne')
+            
+            output_path = self.save_path
+            if output_path.endswith('.pth'):
+                output_path = output_path.replace('.pth', '.dafne')
+            elif not output_path.endswith('.dafne'):
+                output_path += '.dafne'
             self.sig_status.emit("Packaging the model into .dafne format...")
             with open(output_path, 'wb') as f:
                 create_dynamic_model(weights=best_weights, net_metadata=save_params, train_metadata=memory_buffer).dump(f)
