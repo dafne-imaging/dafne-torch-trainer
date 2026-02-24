@@ -83,7 +83,6 @@ class DafneDataset(Dataset):
                  augm_params:dict=None,
                  train_transform:bool=True,
                  spatial_dims:int=2,
-                 dyn_unet:bool=False,
                  external_transforms=None
                  ):
         '''
@@ -120,6 +119,20 @@ class DafneDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
+    
+    def get_original_data(self, idx): 
+        entry = self.data[idx]
+        filepath = entry['filepath']
+        index = entry.get('index', None)
+
+        with np.load(filepath) as npz_data:
+            img = npz_data['data']
+            img = np.ascontiguousarray(np.moveaxis(img, -1, 0))
+            
+            if self.spatial_dims == 2 and index is not None: 
+                img = img[index]
+        
+        return img
 
 
 if __name__ == "__main__":

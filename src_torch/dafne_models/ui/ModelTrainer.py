@@ -240,7 +240,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.location_Text.setText(folder_path)
         extensions = ['.npz']
 
-        found_files = self._scan_group_files(folder_path, extensions) if self.model_3d_check.isChecked() else self._scan_directory_folds(folder_path, extensions)
+        found_files = self._scan_directory_folds(folder_path, extensions)
         if not found_files:
             QMessageBox.warning(self, "No data found", f'Folder selected does not contain valid extension {extensions}')
             self.image_paths = []
@@ -252,12 +252,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.fit_Button.setEnabled(True)
         
-        if self.model_3d_check.isChecked():
-            total_volumes = len(found_files)
-            total_files = sum(len(vol) for vol in found_files)
-            QMessageBox.information(self, "Data loaded successfully", f"Found {total_volumes} volumes (containing {total_files} total files)")
-        else:
-            QMessageBox.information(self, "Data loaded successfully", f"Found {len(found_files)} data files")
+        QMessageBox.information(self, "Data loaded successfully", f"Found {len(found_files)} volumes")
 
     def _scan_directory(self, folder_path, extensions):
         found_files = []
@@ -411,7 +406,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             train_params['lora_config'] = {
                 '.*': {
                     'rank': self.adaptation_params.get('lora_rank', 8),
-                    'alpha': self.adaptation_params.get('lora_alpha', 16)
+                    'alpha': self.adaptation_params.get('lora_alpha', 16),
+                    'rank_for': 'channels'
                 }
             }
         else: # scratch

@@ -34,7 +34,7 @@ class LoRALinearLayer(nn.Module):
 
         self.register_buffer('rank',
                             torch.tensor(lora_config['rank'],
-                            dtype=torch.int,
+                            dtype=self.base_module.weight.dtype,
                             device=self.base_module.weight.device))
         
         # x dimensions: [batch_size, in_features]
@@ -80,7 +80,7 @@ class LoRALinearLayer(nn.Module):
         out_channels, in_channels = dim
 
         new_weight = self.base_module.weight + (self.alpha / self.rank) * (self.delta_weight_B @ self.delta_weight_A)
-
+        
         merged_module = nn.Linear(
             in_features=in_channels,
             out_features=out_channels, 
@@ -129,7 +129,7 @@ class LoRANdConvLayer(nn.Module):
 
         self.register_buffer('rank', 
                             torch.tensor(lora_config['rank'],
-                            dtype=torch.int,
+                            dtype=self.base_module.weight.dtype,
                             device=self.base_module.weight.device))
         
         assert 'rank_for' in lora_config, 'rank_for not found in lora_config'
@@ -189,7 +189,7 @@ class LoRANdConvLayer(nn.Module):
     def disable_adapter(self) -> None:
         self.adapter_enabled = False
     
-    def forward(self, x: Tensor) -> Tensor:
+    '''def forward(self, x: Tensor) -> Tensor:
         if self.adapter_enabled:
             if self.rank_for == 'kernel':
                 new_weights = self.base_module.weight + ((self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B))
@@ -197,7 +197,8 @@ class LoRANdConvLayer(nn.Module):
                 # matmul result is [*kernel, out, in], we need [out, in, *kernel]
                 lora_delta = torch.matmul(self.delta_weight_A, self.delta_weight_B)
                 permute_idx = (self.nd, self.nd + 1) + tuple(range(self.nd))
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * lora_delta.permute(permute_idx))
+                output_lora = lora_delta.permute(permute_idx)
+                new_weights = self.base_module.weight + ((self.alpha / self.rank) * output_lora)
         else: 
             new_weights = self.base_module.weight
         
@@ -210,7 +211,32 @@ class LoRANdConvLayer(nn.Module):
             padding=self.base_module.padding,
             dilation=self.base_module.dilation,
             groups=self.base_module.groups
-        )
+        )'''
+
+    def forward(self, x: Tensor) -> Tensor:
+        if self.adapter_enabled:
+            delta_lora = None
+            if self.rank_for == 'kernel':
+                delta_lora = (self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B)
+            elif self.rank_for == 'channels':
+                lora_delta = torch.matmul(self.delta_weight_A, self.delta_weight_B)
+                permute_idx = (self.nd, self.nd + 1) + tuple(range(self.nd))
+                delta_lora = (self.alpha / self.rank) * lora_delta.permute(permute_idx)
+        
+            conv_fn = getattr(F, f"conv{self.nd}d")
+            delta_output = conv_fn(
+                input=x,
+                weight=delta_lora,
+                bias=None,
+                stride=self.base_module.stride,
+                padding=self.base_module.padding,
+                dilation=self.base_module.dilation,
+                groups=self.base_module.groups
+            )
+            return self.base_module(x) + delta_output
+        
+        else: 
+            return self.base_module(x)
     
     def __repr__(self) -> str:
         spatial_info = ", ".join([f"k{i}={s}" for i, s in enumerate(self.kernel_size)])
@@ -279,7 +305,7 @@ class LoRA2dConvLayer(nn.Module):
 
         self.register_buffer('rank', 
                             torch.tensor(lora_config['rank'],
-                            dtype=torch.int,
+                            dtype=self.base_module.weight.dtype,
                             device=self.base_module.weight.device)) #add rank to register buffer
         
         assert 'rank_for' in lora_config.keys(), 'rank_for not found in lora_config'
@@ -427,7 +453,7 @@ class LoRA3dConvLayer(nn.Module):
 
         self.register_buffer('rank', 
                             torch.tensor(lora_config['rank'],
-                            dtype=torch.int,
+                            dtype=self.base_module.weight.dtype,
                             device=self.base_module.weight.device)) #add rank to register buffer
         
         assert 'rank_for' in lora_config.keys(), 'rank_for not found in lora_config'

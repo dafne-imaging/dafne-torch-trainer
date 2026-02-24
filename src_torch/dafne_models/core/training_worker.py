@@ -417,7 +417,6 @@ class TrainingWorker(QThread):
 
                 with open(self.pretrained_model_path, "rb") as f:
                     loaded_obj = DynamicTorchModel.Load(f)
-                model = loaded_obj.model
 
                 # Get percent_to_freeze from train_params if available
                 percent_to_freeze = self.train_params.get('percent_to_freeze', None)
