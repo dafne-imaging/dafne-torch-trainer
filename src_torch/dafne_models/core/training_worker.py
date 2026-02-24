@@ -522,6 +522,13 @@ class TrainingWorker(QThread):
             #save model, weights and metadata in .dafne format
             weights_path = os.path.join(save_dir, f'{self.model_params.get("model_name", "unet")}_best_model.pth')
             best_weights = torch.load(weights_path, map_location='cpu')
+
+            if isinstance(model, LoRAModel):
+                self.sig_status.emit("Packaging the LoRA model into .dafne format...")
+                model.load_state_dict(best_weights)
+                merged_model = model.get_merged_model()
+                best_weights = merged_model.state_dict()
+                del merged_model
             
             output_path = self.save_path
             if output_path.endswith('.pth'):

@@ -275,26 +275,49 @@ class LoRANdConvLayer(nn.Module):
 
         if self.adapter_enabled:
             if self.rank_for == 'kernel':
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B))
+                delta_lora = torch.matmul(self.delta_weight_A, self.delta_weight_B)
+                if self.is_transposed:
+                    delta_lora = delta_lora.transpose(0, 1)
             elif self.rank_for == 'channels':
                 lora_delta = torch.matmul(self.delta_weight_A, self.delta_weight_B)
-                permute_idx = (self.nd, self.nd + 1) + tuple(range(self.nd))
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * lora_delta.permute(permute_idx))
+
+                if not self.is_transposed:
+                    permute_idx = (self.nd, self.nd + 1) + tuple(range(self.nd))
+                elif self.is_transposed: 
+                    permute_idx = (self.nd + 1, self.nd) + tuple(range(self.nd))
+                delta_lora = lora_delta.permute(permute_idx)
+            
+            delta_lora = (self.alpha / self.rank) * delta_lora
+            new_weights = self.base_module.weight + delta_lora
         else:
             new_weights = self.base_module.weight
 
-        conv_cls = getattr(nn, f"Conv{self.nd}d")
-        merged_module = conv_cls(
-            in_channels=self.base_module.in_channels,
-            out_channels=self.base_module.out_channels,
-            kernel_size=self.base_module.kernel_size,
-            stride=self.base_module.stride,
-            padding=self.base_module.padding,
-            dilation=self.base_module.dilation,
-            groups=self.base_module.groups,
-            bias=(self.base_module.bias is not None),
-            padding_mode=self.base_module.padding_mode
-        )
+        if self.is_transposed:
+            conv_cls = getattr(nn, f"ConvTranspose{self.nd}d")
+            merged_module = conv_cls(
+                in_channels=self.base_module.in_channels,
+                out_channels=self.base_module.out_channels,
+                kernel_size=self.base_module.kernel_size,
+                stride=self.base_module.stride,
+                padding=self.base_module.padding,
+                dilation=self.base_module.dilation,
+                groups=self.base_module.groups,
+                bias=(self.base_module.bias is not None),
+                output_padding=self.base_module.output_padding
+            )
+        else:
+            conv_cls = getattr(nn, f"Conv{self.nd}d")
+            merged_module = conv_cls(
+                in_channels=self.base_module.in_channels,
+                out_channels=self.base_module.out_channels,
+                kernel_size=self.base_module.kernel_size,
+                stride=self.base_module.stride,
+                padding=self.base_module.padding,
+                dilation=self.base_module.dilation,
+                groups=self.base_module.groups,
+                bias=(self.base_module.bias is not None),
+                padding_mode=self.base_module.padding_mode
+            )
         merged_module.weight.data = new_weights.data
         if self.base_module.bias is not None: 
             merged_module.bias.data = self.base_module.bias.data
