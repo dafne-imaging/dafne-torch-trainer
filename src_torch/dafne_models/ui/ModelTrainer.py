@@ -538,7 +538,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         QMessageBox.information(self, "Stopped", "Training stopped correctly.")
 
     def _clear_paths_and_data(self):
-        """Reset all paths and internal data lists"""
+        """Reset all paths, internal data lists and UI mode switches"""
         self.image_paths = []
         self.mask_paths = None
         self.save_path = None
@@ -547,6 +547,15 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.location_Text.clear()
         self.model_location_Text.clear()
         self.pretrained_location_Text.clear()
+        
+        # Ensure they stay disabled
+        self.location_Text.setEnabled(False)
+        self.model_location_Text.setEnabled(False)
+        self.pretrained_location_Text.setEnabled(False)
+
+        # Reset mode switches to avoid "inheritance" from previous run
+        self.model_3d_check.setChecked(False)
+        self.check_auto_params.setChecked(False)
         
         self.fit_Button.setEnabled(False)
         

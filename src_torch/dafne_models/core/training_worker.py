@@ -175,7 +175,7 @@ class TrainingWorker(QThread):
             self.sig_status.emit("Dynamic Mode: Analyzing Dataset Fingerprint...")
 
             patch_size, batch_size = get_optimal_hyperparameters(
-                median_shape, spatial_dims=spatial_dims
+                median_shape, spatial_dims=spatial_dims, is_finetune=False
             )
             final_patch_size = patch_size
             
@@ -308,7 +308,7 @@ class TrainingWorker(QThread):
         
         if use_dynamic:
             patch_size, auto_batch_size = get_optimal_hyperparameters(
-                    median_shape, spatial_dims=spatial_dims
+                    median_shape, spatial_dims=spatial_dims, is_finetune=True
                 )
             final_patch_size = patch_size
 
@@ -359,21 +359,34 @@ class TrainingWorker(QThread):
         :param degree: percentage of layers to freeze
         '''
 
-        named_params = list(model.named_parameters())
-        num_params = len(named_params)
-        num_to_freeze = int(num_params * degree)
+        trainable_modules = [
+            (name, module)
+            for name, module in model.named_modules() #extract all modules
+            if len(list(module.parameters(recurse=False))) > 0
+        ] # list of modules that have parameters
 
-        self.sig_status.emit(f"Fine-tuning: freezing {num_to_freeze}/{num_params} \
+        num_modules = len(trainable_modules)
+        num_to_freeze = int(num_modules * degree)
+
+        self.sig_status.emit(f"Fine-tuning: freezing {num_to_freeze}/{num_modules} \
             parameter blocks ({degree*100:.0f}%)")
         
-        for i, (name, param) in enumerate(named_params):
-            if i < num_to_freeze:
-                if "norm" in name.lower() or 'bn' in name.lower():
+        for i, (name, module) in enumerate(trainable_modules):
+            is_norm = isinstance(module, (
+                torch.nn.BatchNorm1d, torch.nn.BatchNorm2d,
+                torch.nn.BatchNorm3d, torch.nn.InstanceNorm1d,
+                torch.nn.InstanceNorm2d, torch.nn.InstanceNorm3d,
+                torch.nn.LayerNorm, torch.nn.GroupNorm
+            ))
+
+            if is_norm:
+                for param in module.parameters():
                     param.requires_grad = True
-                else:
-                    param.requires_grad = False
-            else:
-                param.requires_grad = True
+                continue
+
+            freeze_layers = (i < num_to_freeze)
+            for param in module.parameters(recurse=False):
+                param.requires_grad = not freeze_layers 
 
 
     # implementation of run method that will be run in separate Thread
