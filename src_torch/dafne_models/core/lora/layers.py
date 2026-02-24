@@ -1,5 +1,6 @@
 #see https://medium.com/@adimodi96/extending-low-rank-adaptation-lora-to-convolution-layers-38d67fa777cb for more details
 
+from tempfile import gettempdir
 import torch
 from torch import Tensor
 import torch.nn as nn
@@ -117,8 +118,13 @@ class LoRANdConvLayer(nn.Module):
         for param in self.base_module.parameters():
             param.requires_grad = False
         
-        # Determine dimensionality (1D, 2D, or 3D)
-        out_channels, in_channels, *kernel_size = self.base_module.weight.size()
+        self.is_transposed = isinstance(base_module, nn.modules.conv._ConvTransposeNd)
+        
+        # Consistent channel assignment (ConvTranspose has inverted weight shape: [in, out/groups, ...])
+        in_channels = self.base_module.in_channels
+        out_channels = self.base_module.out_channels
+        kernel_size = self.base_module.kernel_size
+        
         self.nd = len(kernel_size)
         self.kernel_size = kernel_size
 
@@ -217,22 +223,43 @@ class LoRANdConvLayer(nn.Module):
         if self.adapter_enabled:
             delta_lora = None
             if self.rank_for == 'kernel':
-                delta_lora = (self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B)
+                delta_lora = torch.matmul(self.delta_weight_A, self.delta_weight_B)
+                if self.is_transposed:
+                    delta_lora = delta_lora.transpose(0, 1)
             elif self.rank_for == 'channels':
                 lora_delta = torch.matmul(self.delta_weight_A, self.delta_weight_B)
-                permute_idx = (self.nd, self.nd + 1) + tuple(range(self.nd))
-                delta_lora = (self.alpha / self.rank) * lora_delta.permute(permute_idx)
-        
-            conv_fn = getattr(F, f"conv{self.nd}d")
-            delta_output = conv_fn(
-                input=x,
-                weight=delta_lora,
-                bias=None,
-                stride=self.base_module.stride,
-                padding=self.base_module.padding,
-                dilation=self.base_module.dilation,
-                groups=self.base_module.groups
-            )
+
+                if not self.is_transposed:
+                    permute_idx = (self.nd, self.nd + 1) + tuple(range(self.nd))
+                elif self.is_transposed: 
+                    permute_idx = (self.nd + 1, self.nd) + tuple(range(self.nd))
+                delta_lora = lora_delta.permute(permute_idx)
+
+            delta_lora = (self.alpha / self.rank) * delta_lora
+
+            if self.is_transposed:
+                conv_fn = getattr(F, f"conv_transpose{self.nd}d")
+                delta_output = conv_fn(
+                    input=x,
+                    weight=delta_lora,
+                    bias=None,
+                    stride=self.base_module.stride,
+                    padding=self.base_module.padding,
+                    dilation=self.base_module.dilation,
+                    groups=self.base_module.groups,
+                    output_padding=self.base_module.output_padding
+                )
+            else: 
+                conv_fn = getattr(F, f"conv{self.nd}d")
+                delta_output = conv_fn(
+                    input=x,
+                    weight=delta_lora,
+                    bias=None,
+                    stride=self.base_module.stride,
+                    padding=self.base_module.padding,
+                    dilation=self.base_module.dilation,
+                    groups=self.base_module.groups
+                )
             return self.base_module(x) + delta_output
         
         else: 
@@ -365,25 +392,22 @@ class LoRA2dConvLayer(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
         if self.adapter_enabled:
             if self.rank_for == 'kernel':
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B))
+                delta_weight = torch.matmul(self.delta_weight_A, self.delta_weight_B)
             elif self.rank_for == 'channels':
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B).permute(2, 3, 0, 1))
+                delta_weight = torch.matmul(self.delta_weight_A, self.delta_weight_B).permute(2, 3, 0, 1)
+            
+            delta_output = F.conv2d(
+                input=x, 
+                weight=delta_weight,
+                bias=None,
+                stride=self.base_module.stride,
+                padding=self.base_module.padding,
+                dilation=self.base_module.dilation,
+                groups=self.base_module.groups
+            )
+            return self.base_module(x) + (self.alpha / self.rank) * delta_output
         
-        else: 
-            new_weights = self.base_module.weight
-        
-        #get bias from base module
-        bias = self.base_module.bias
-
-        return F.conv2d(
-            input=x, 
-            weight=new_weights,
-            bias=bias,
-            stride=self.base_module.stride,
-            padding=self.base_module.padding,
-            dilation=self.base_module.dilation,
-            groups=self.base_module.groups
-        )
+        return self.base_module(x)
     
     #get lora layer representation
     def __repr__(self) -> str:
@@ -511,27 +535,23 @@ class LoRA3dConvLayer(nn.Module):
     
     def forward(self, x: Tensor) -> Tensor:
         if self.adapter_enabled:
-            new_weights = None
             if self.rank_for == 'kernel':
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B))
+                delta_weight = torch.matmul(self.delta_weight_A, self.delta_weight_B)
             elif self.rank_for == 'channels':
-                new_weights = self.base_module.weight + ((self.alpha / self.rank) * torch.matmul(self.delta_weight_A, self.delta_weight_B).permute(3, 4, 0, 1, 2))
+                delta_weight = torch.matmul(self.delta_weight_A, self.delta_weight_B).permute(3, 4, 0, 1, 2)
+            
+            delta_output = F.conv3d(
+                input=x, 
+                weight=delta_weight,
+                bias=None,
+                stride=self.base_module.stride,
+                padding=self.base_module.padding,
+                dilation=self.base_module.dilation,
+                groups=self.base_module.groups
+            )
+            return self.base_module(x) + (self.alpha / self.rank) * delta_output
         
-        else: 
-            new_weights = self.base_module.weight
-        
-        #get bias from base module
-        bias = self.base_module.bias
-
-        return F.conv3d(
-            input=x, 
-            weight=new_weights,
-            bias=bias,
-            stride=self.base_module.stride,
-            padding=self.base_module.padding,
-            dilation=self.base_module.dilation,
-            groups=self.base_module.groups
-        )
+        return self.base_module(x)
     
     #get lora layer representation
     def __repr__(self) -> str:
