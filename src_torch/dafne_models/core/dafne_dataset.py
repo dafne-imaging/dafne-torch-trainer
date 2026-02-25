@@ -35,7 +35,7 @@ class MapTransformLoadData(MapTransform):
             index = data.get('index', None)
 
             try: 
-                with np.load(filepath) as npz_data: 
+                with np.load(filepath, mmap_mode='r') as npz_data: 
                     keys = list(npz_data.keys())
                     
                     mask_keys = sorted(k for k in npz_data.keys() if k.startswith('mask'))
@@ -104,7 +104,7 @@ class DafneDataset(Dataset):
 
         elif self.spatial_dims == 2: 
             for f in self.data_files:
-                with np.load(f) as npz_data:
+                with np.load(f, mmap_mode='r') as npz_data:
                     depth = npz_data['data'].shape[2]
                     for d in range(depth):
                         data_dict.append({'filepath':f, 'index': d})
