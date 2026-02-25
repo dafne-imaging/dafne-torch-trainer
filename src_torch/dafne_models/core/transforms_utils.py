@@ -224,7 +224,7 @@ class PreprocessAnisotropy(MapTransform):
         if isinstance(image, torch.Tensor): image = image.numpy()
         if "mask" in self.keys and isinstance(label, torch.Tensor): label = label.numpy()
 
-        if not np.allclose(self.target_spacing, image_spacing, atol=1e-4):
+        if 0 not in original_shape and not np.allclose(self.target_spacing, image_spacing, atol=1e-4):
             resample_flag = True
             anisotrophy_flag = self.check_anisotrophy(image_spacing)
             
