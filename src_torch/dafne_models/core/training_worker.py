@@ -1,10 +1,10 @@
 import os
-import json
 import traceback
 import random as rd
 import numpy as np
 
 import torch
+from torch.optim.lr_scheduler import CosineAnnealingLR
 
 from monai.data import DataLoader
 from monai.losses import DiceCELoss
@@ -468,6 +468,7 @@ class TrainingWorker(QThread):
                                  softmax=True,
                                  to_onehot_y=True,
                                  squared_pred=True)
+            scheduler = CosineAnnealingLR(optimizer, T_max=self.train_params.get('epochs', 100), eta_min=1e-6)
 
             best_val_dice = pytorch_training_loop(
                 model=model,
@@ -479,6 +480,7 @@ class TrainingWorker(QThread):
                 epochs=self.train_params.get('epochs', 100),
                 #callback injection
                 save_path=self.save_path,
+                scheduler=scheduler,
                 on_epoch_end=self._callback_epoch_end,
                 check_stop=self._callback_check_stop,
                 on_log=self._callback_log,

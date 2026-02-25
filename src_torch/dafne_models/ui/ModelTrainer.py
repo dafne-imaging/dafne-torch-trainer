@@ -154,10 +154,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         # Change button text or color to show it's configured
         if mode == 'lora':
             self.finetuning_settings_btn.setText("Fine-tuning (LoRA)")
+            self.spin_lr.setValue(1e-4)
         elif mode == 'finetune':
             self.finetuning_settings_btn.setText("Fine-tuning (Classic)")
+            self.spin_lr.setValue(1e-5)
         else:
             self.finetuning_settings_btn.setText("Fine-tuning Settings")
+            self.spin_lr.setValue(1e-3)
         
         self._update_advanced_ui_state()
     
@@ -461,6 +464,16 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
     
     def update_status_label(self, message): 
         self.progress_Label.setText(message)
+
+    def restore_image_contrast(self, img):
+        # Normalize non-zero pixels to [0, 1] to restore the visual color range
+        img_vis = img.copy()
+        mask_nonzero = (img_vis != 0)
+        if np.any(mask_nonzero):
+            min_val = img_vis[mask_nonzero].min()
+            max_val = img_vis[mask_nonzero].max()
+            img_vis[mask_nonzero] = (img_vis[mask_nonzero] - min_val) / (max_val - min_val + 1e-8)
+        return img_vis
     
     @QtCore.pyqtSlot(float, object, object, float, object, float)
     def update_plots(self, loss, img, mask, val_loss, spacing, best_dice):
@@ -476,6 +489,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_preview.clear()
         
         if img.ndim == 3: img = img[0, :, :] # only the first channel
+        img = self.restore_image_contrast(img)
 
         # --- BLOCCO DI DEBUG (Da rimuovere dopo) ---
         print("\n--- DEBUG VISUALIZZAZIONE ---")

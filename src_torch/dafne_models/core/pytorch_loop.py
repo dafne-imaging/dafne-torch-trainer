@@ -11,6 +11,7 @@ from monai.transforms import Compose, AsDiscrete
 PATIENT = 20
 
 # definition of classic training loop
+# with FP16 precision and autocast
 def pytorch_training_loop(model, 
                           train_dataloader,
                           valid_dataloader,
@@ -21,6 +22,7 @@ def pytorch_training_loop(model,
                           spatial_dims:int=2,
                           n_classes:int=2,
                           early_stopping:bool=False,
+                          scheduler=None,
                           save_path:str=None,
                           model_name:str=None,
                           on_epoch_end=None,
@@ -34,6 +36,8 @@ def pytorch_training_loop(model,
     dice_metric = DiceMetric(include_background=False, reduction='mean')
     best_val_dice_score = -float("inf")
     counter = 0
+
+    scaler = torch.cuda.amp.GradScaler()
 
     for epoch in range(epochs):
         
@@ -52,13 +56,19 @@ def pytorch_training_loop(model,
             inputs = batch['image'].to(device)
             targets = batch['mask'].long().to(device)
             optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
-            loss.backward()
-            optimizer.step()
+            with torch.autocast(device_type=device.type, dtype=torch.float16):
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             epoch_loss += loss.item()
         
+        if scheduler is not None:
+            current_lr = scheduler.get_last_lr()
+            scheduler.step()
+
         if check_stop is not None and check_stop():
             break
         
@@ -83,10 +93,11 @@ def pytorch_training_loop(model,
                     break
                 val_image = batch['image'].to(device)
                 val_mask = batch['mask'].long().to(device)
-                if spatial_dims == 3: 
-                    val_output = valid_on_batch_3d(val_image, model, val_roi_size) # return original tensor shape
-                else:
-                    val_output = model(val_image)
+                with torch.autocast(device_type=device.type, dtype=torch.float16):
+                    if spatial_dims == 3: 
+                        val_output = valid_on_batch_3d(val_image, model, val_roi_size) # return original tensor shape
+                    else:
+                        val_output = model(val_image)
                 val_output_decollate = decollate_batch(val_output)
                 val_label_decollate = decollate_batch(val_mask)
                 val_preds = [post_pred(i) for i in val_output_decollate]
@@ -144,10 +155,11 @@ def pytorch_training_loop(model,
 
         model.eval()
         with torch.no_grad():
-            if spatial_dims == 3: 
-                val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model, val_roi_size)
-            else: 
-                val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
+            with torch.autocast(device_type=device.type, dtype=torch.float16):
+                if spatial_dims == 3: 
+                    val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model, val_roi_size)
+                else: 
+                    val_pred_out = model(val_image.unsqueeze(0)) # add batch dim
             val_pred = torch.argmax((val_pred_out), dim=1).float()
 
             dims = val_image.shape
