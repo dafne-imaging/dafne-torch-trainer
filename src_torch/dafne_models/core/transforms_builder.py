@@ -29,12 +29,14 @@ def build_transform_list(keys:list,
             MapTransformLoadData(keys=keys, spatial_dims=3),
             EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
             PreprocessAnisotropy(keys=['image', 'mask'], 
-                                                    target_spacing=median_spacing,
-                                                    model_mode='train' if train_transforms else None)
+                                 target_spacing=median_spacing,
+                                 model_mode='train' if train_transforms else None)
         ]
 
         if train_transforms:
-            
+            pipeline.append(
+                SpatialPadd(keys=['image', 'mask'], spatial_size=(16, 96, 96), method='symmetric')
+            )
             pipeline.append( 
                 RandCropByPosNegLabeld(
                     keys=['image', 'mask'], label_key='mask',
@@ -54,16 +56,20 @@ def build_transform_list(keys:list,
                 pipeline.append(RandZoomd(keys=['image', 'mask'], prob=0.5, min_zoom=0.9, max_zoom=1.1, mode=['bilinear', 'nearest']))
             if augm_params.get('noise'):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
-    
-            pipeline.append(ToTensord(keys=['image', 'mask']))
+        else:
+            pipeline.append(
+                SpatialPadd(keys=['image', 'mask'], spatial_size=(16, 96, 96), method='symmetric')
+            )
+
+        pipeline.append(ToTensord(keys=['image', 'mask']))
     
     else: 
         pipeline = [
             MapTransformLoadData(keys=keys, spatial_dims=2),
             EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
             PreprocessAnisotropy(keys=['image', 'mask'], 
-                                                target_spacing=median_spacing,
-                                                model_mode='train' if train_transforms else None)
+                                 target_spacing=median_spacing,
+                                 model_mode='train' if train_transforms else None)
         ]
     
         if train_transforms:
@@ -78,8 +84,8 @@ def build_transform_list(keys:list,
             if augm_params.get('noise'):
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
             
-    pipeline.extend([ToTensord(keys=['image', 'mask']), 
-                        DivisiblePadd(keys=['image', 'mask'], k=32)])
+        pipeline.extend([ToTensord(keys=['image', 'mask']), 
+                         DivisiblePadd(keys=['image', 'mask'], k=32)])
     
     return pipeline
 
