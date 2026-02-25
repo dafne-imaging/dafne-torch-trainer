@@ -467,7 +467,8 @@ class TrainingWorker(QThread):
             criterion = DiceCELoss(include_background=False, 
                                  softmax=True,
                                  to_onehot_y=True,
-                                 squared_pred=True)
+                                 squared_pred=True, 
+                                 smooth_dr=1e-5) # for nan loss
             scheduler = CosineAnnealingLR(optimizer, T_max=self.train_params.get('epochs', 100), eta_min=1e-6)
 
             best_val_dice = pytorch_training_loop(

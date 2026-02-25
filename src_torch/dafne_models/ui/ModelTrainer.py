@@ -154,13 +154,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         # Change button text or color to show it's configured
         if mode == 'lora':
             self.finetuning_settings_btn.setText("Fine-tuning (LoRA)")
-            self.spin_lr.setValue(1e-4)
+            self.lr_spin.setValue(1e-4)
         elif mode == 'finetune':
             self.finetuning_settings_btn.setText("Fine-tuning (Classic)")
-            self.spin_lr.setValue(1e-5)
+            self.lr_spin.setValue(1e-5)
         else:
             self.finetuning_settings_btn.setText("Fine-tuning Settings")
-            self.spin_lr.setValue(1e-3)
+            self.lr_spin.setValue(1e-3)
         
         self._update_advanced_ui_state()
     

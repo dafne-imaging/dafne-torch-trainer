@@ -37,7 +37,7 @@ def pytorch_training_loop(model,
     best_val_dice_score = -float("inf")
     counter = 0
 
-    scaler = torch.cuda.amp.GradScaler()
+    scaler = torch.amp.GradScaler()
 
     for epoch in range(epochs):
         
@@ -60,6 +60,7 @@ def pytorch_training_loop(model,
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) #gradient clipping
             scaler.step(optimizer)
             scaler.update()
 
