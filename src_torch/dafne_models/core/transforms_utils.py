@@ -206,7 +206,10 @@ class PreprocessAnisotropy(MapTransform):
 
         if self.training:
             cropped_data = self.crop_foreg({"image": image, "mask": label})
-            image, label = cropped_data["image"], cropped_data["mask"]
+            if 0 in cropped_data["image"].shape[1:]:
+                pass
+            else:
+                image, label = cropped_data["image"], cropped_data["mask"]
         else:
             d["original_shape"] = np.array(image.shape[1:])
             box_start, box_end = generate_spatial_bounding_box(image, allow_smaller=True)
