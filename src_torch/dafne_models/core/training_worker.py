@@ -174,8 +174,13 @@ class TrainingWorker(QThread):
         if use_dynamic and spatial_dims == 3:
             self.sig_status.emit("Dynamic Mode: Analyzing Dataset Fingerprint...")
 
+            axis_divisors = np.prod(self.model_params['strides'], axis=0) if \
+                self.model_params['strides'] is not None else None
+
             patch_size, batch_size = get_optimal_hyperparameters(
-                median_shape, spatial_dims=spatial_dims, is_finetune=False
+                median_shape, spatial_dims=spatial_dims, is_finetune=False, \
+                    mixed_precision=self.train_params.get('mixed_precision', False), \
+                    divisor=axis_divisors
             )
             final_patch_size = patch_size
             
@@ -221,13 +226,15 @@ class TrainingWorker(QThread):
                                                 median_spacing,
                                                 True,
                                                 augm_params,
-                                                self.model_params['spatial_dims'])
+                                                self.model_params['spatial_dims'],
+                                                patch_size=final_patch_size)
 
             valid_transforms = build_transform_list(['filepath'],
                                                     median_spacing,
                                                     False,
                                                     augm_params,
-                                                    self.model_params['spatial_dims'])
+                                                    self.model_params['spatial_dims'],
+                                                    patch_size=final_patch_size)
         
         self.model_params['batch_size'] = batch_size
         self.model_params['patch_size'] = final_patch_size
@@ -337,13 +344,15 @@ class TrainingWorker(QThread):
                                                     median_spacing,
                                                     True,
                                                     augm_params,
-                                                    spatial_dims)
+                                                    spatial_dims,
+                                                    patch_size=final_patch_size)
 
             valid_transforms = build_transform_list(['filepath'],
                                                     median_spacing,
                                                     False,
                                                     augm_params,
-                                                    spatial_dims)
+                                                    spatial_dims,
+                                                    patch_size=final_patch_size)
 
         self.model_params['out_channels'] = n_classes
         self.train_params['batch_size'] = batch_size
@@ -469,7 +478,10 @@ class TrainingWorker(QThread):
                                  to_onehot_y=True,
                                  squared_pred=True, 
                                  smooth_dr=1e-5) # for nan loss
-            scheduler = CosineAnnealingLR(optimizer, T_max=self.train_params.get('epochs', 100), eta_min=1e-6)
+            
+            scheduler = None
+            if self.train_params.get('scheduler', False):
+                scheduler = CosineAnnealingLR(optimizer, T_max=self.train_params.get('epochs', 100), eta_min=1e-6)
 
             best_val_dice = pytorch_training_loop(
                 model=model,
@@ -487,6 +499,7 @@ class TrainingWorker(QThread):
                 on_log=self._callback_log,
                 early_stopping=self.early_stopping,
                 n_classes=n_classes,
+                mixed_precision=self.train_params.get('mixed_precision', False),
                 spatial_dims=self.model_params['spatial_dims'],
                 val_roi_size=self.model_params['patch_size'],
                 model_name=self.model_params['model_name']

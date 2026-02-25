@@ -395,7 +395,9 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             'epochs': epochs,
             'learning_rate': lr,
             'batch_size': batch_size,
-            'augmentation': self.augm_params
+            'augmentation': self.augm_params,
+            'mixed_precision': self.mixed_precision_check.isChecked(),
+            'scheduler': self.scheduler_check.isChecked()
         }
 
         # Add adaptation parameters

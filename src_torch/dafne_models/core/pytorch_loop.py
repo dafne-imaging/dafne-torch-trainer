@@ -23,6 +23,7 @@ def pytorch_training_loop(model,
                           n_classes:int=2,
                           early_stopping:bool=False,
                           scheduler=None,
+                          mixed_precision:bool=False,
                           save_path:str=None,
                           model_name:str=None,
                           on_epoch_end=None,
@@ -37,7 +38,7 @@ def pytorch_training_loop(model,
     best_val_dice_score = -float("inf")
     counter = 0
 
-    scaler = torch.amp.GradScaler()
+    scaler = torch.amp.GradScaler(enabled=mixed_precision)
 
     for epoch in range(epochs):
         
@@ -56,7 +57,7 @@ def pytorch_training_loop(model,
             inputs = batch['image'].to(device)
             targets = batch['mask'].long().to(device)
             optimizer.zero_grad()
-            with torch.autocast(device_type=device.type, dtype=torch.float16):
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=mixed_precision):
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
@@ -94,7 +95,7 @@ def pytorch_training_loop(model,
                     break
                 val_image = batch['image'].to(device)
                 val_mask = batch['mask'].long().to(device)
-                with torch.autocast(device_type=device.type, dtype=torch.float16):
+                with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=mixed_precision):
                     if spatial_dims == 3: 
                         val_output = valid_on_batch_3d(val_image, model, val_roi_size) # return original tensor shape
                     else:
@@ -156,7 +157,7 @@ def pytorch_training_loop(model,
 
         model.eval()
         with torch.no_grad():
-            with torch.autocast(device_type=device.type, dtype=torch.float16):
+            with torch.autocast(device_type=device.type, dtype=torch.float16, enabled=mixed_precision):
                 if spatial_dims == 3: 
                     val_pred_out = valid_on_batch_3d(val_image.unsqueeze(0), model, val_roi_size)
                 else: 

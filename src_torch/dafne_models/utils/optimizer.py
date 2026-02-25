@@ -7,6 +7,8 @@ def get_optimal_hyperparameters(
     spatial_dims: int = 3,
     safety_factor: float = 0.70,
     is_finetune: bool = False,
+    mixed_precision: bool = False,
+    divisor: list = None,
 ) -> list:
     """
     Calculates the optimal patch size and batch size constrained by available VRAM,
@@ -17,9 +19,11 @@ def get_optimal_hyperparameters(
                              or [H, W] (2-D).
         spatial_dims (int): 2 or 3.
         safety_factor (float): Fraction of total VRAM considered usable.
-                               Defaults to 0.70 (more conservative than before).
+                               Defaults to 0.70.
         is_finetune (bool): Whether this is a fine-tuning run (fewer active
                             gradients → lower per-voxel cost).
+        mixed_precision (bool): if mixed precision is enabled.
+        divisor (list): list of divisors for each dimension.
 
     Returns:
         tuple:
@@ -37,9 +41,11 @@ def get_optimal_hyperparameters(
     total_vram = gpu_props.total_memory  # bytes
 
     BYTES_PER_VOXEL = 6_000 if is_finetune else 10_000
+    BYTES_PER_VOXEL = BYTES_PER_VOXEL * 0.6 if mixed_precision else BYTES_PER_VOXEL
 
     # Static overhead: model weights + optimiser state + CUDA/cuDNN buffers.
     STATIC_OVERHEAD = int(1.0e9) if is_finetune else int(1.5e9)  # 1 GB / 1.5 GB
+    STATIC_OVERHEAD = STATIC_OVERHEAD * 0.8 if mixed_precision else STATIC_OVERHEAD
 
     usable_vram = max(total_vram * safety_factor - STATIC_OVERHEAD, 0)
 
@@ -51,7 +57,11 @@ def get_optimal_hyperparameters(
     #   3. If it does not fit, scale the patch down uniformly so that
     #      batch = 2 fits exactly within the VRAM budget.
     DESIRED_BATCH = 2
-    DIVISOR = 32
+    
+    if divisor is None:
+        divisor = [32] * spatial_dims
+    
+    divisor = np.array(divisor)
 
     target_patch = np.array(median_shape, dtype=float)
     target_voxels = float(np.prod(target_patch))
@@ -73,8 +83,8 @@ def get_optimal_hyperparameters(
 
     # Round patch dimensions down to nearest multiple of DIVISOR (required by
     # most U-Net implementations for valid pooling/upsampling paths).
-    optimal_patch = np.floor(optimal_patch / DIVISOR) * DIVISOR
-    optimal_patch = np.maximum(optimal_patch, [DIVISOR] * spatial_dims)
+    optimal_patch = np.floor(optimal_patch / divisor) * divisor
+    optimal_patch = np.maximum(optimal_patch, divisor)
 
     # After rounding, perform a final sanity-check: does the rounded patch
     # still fit within budget at the chosen batch size?  If not, halve the
