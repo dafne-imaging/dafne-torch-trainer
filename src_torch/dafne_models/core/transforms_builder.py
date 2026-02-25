@@ -69,7 +69,8 @@ def build_transform_list(keys:list,
             EnsureChannelFirstd(keys=['image', 'mask'], channel_dim='no_channel'),
             PreprocessAnisotropy(keys=['image', 'mask'], 
                                  target_spacing=median_spacing,
-                                 model_mode='train' if train_transforms else None)
+                                 model_mode='train' if train_transforms else None,
+                                 spatial_dims=2)
         ]
     
         if train_transforms:

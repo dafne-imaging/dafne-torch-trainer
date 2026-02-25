@@ -18,12 +18,20 @@ class DafneUnetModel(nn.Module):
         # define the feature channels extracted on downsampling path: it depends on n_levels
         feature_channels = tuple(start_channel * (2**i) for i in range(n_levels))
 
-        # define the strides for each level
-        # first level no downsampling, then downsample by factor 2
-        strides = tuple([1] + [2] * (n_levels - 1))
-
         self.spatial_dims = spatial_dims
         self.out_channels = out_channels
+
+        # define the strides for each level
+        if self.spatial_dims == 3:
+            strides_list = [(1, 1, 1)]
+            for i in range (1, n_levels):
+                if i<=2:
+                    strides_list.append((2, 2, 2))
+                else:
+                    strides_list.append((1, 2, 2))
+            strides = tuple(strides_list)
+        else:
+            strides = tuple([1] + [2] * (n_levels - 1))
 
         self.unet_model = monai_nets.Unet(
             spatial_dims = spatial_dims,
@@ -33,7 +41,7 @@ class DafneUnetModel(nn.Module):
             num_res_units = num_res_units,
             strides = strides,
             kernel_size=kernel_size,
-            norm='batch'
+            norm='INSTANCE'
         )
 
     def forward(self, x):
