@@ -226,15 +226,13 @@ class TrainingWorker(QThread):
                                                 median_spacing,
                                                 True,
                                                 augm_params,
-                                                self.model_params['spatial_dims'],
-                                                patch_size=final_patch_size)
+                                                self.model_params['spatial_dims'])
 
             valid_transforms = build_transform_list(['filepath'],
                                                     median_spacing,
                                                     False,
                                                     augm_params,
-                                                    self.model_params['spatial_dims'],
-                                                    patch_size=final_patch_size)
+                                                    self.model_params['spatial_dims'])
         
         self.model_params['batch_size'] = batch_size
         self.model_params['patch_size'] = final_patch_size
@@ -344,15 +342,13 @@ class TrainingWorker(QThread):
                                                     median_spacing,
                                                     True,
                                                     augm_params,
-                                                    spatial_dims,
-                                                    patch_size=final_patch_size)
+                                                    spatial_dims)
 
             valid_transforms = build_transform_list(['filepath'],
                                                     median_spacing,
                                                     False,
                                                     augm_params,
-                                                    spatial_dims,
-                                                    patch_size=final_patch_size)
+                                                    spatial_dims)
 
         self.model_params['out_channels'] = n_classes
         self.train_params['batch_size'] = batch_size
