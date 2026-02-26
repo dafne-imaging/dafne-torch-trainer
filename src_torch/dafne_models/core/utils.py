@@ -20,9 +20,8 @@ def get_median_spacing(data_list:dict, spatial_dims:int=2):
 
 def count_label_mask(data_list: list):
     max_masks_found = 0
-    limit = min(len(data_list), 50)
     
-    for i in range(limit):
+    for i in range(len(data_list)):
         filepath = data_list[i]
         try:
             # mmap_mode='r' legge solo l'header del file
@@ -37,4 +36,6 @@ def count_label_mask(data_list: list):
             continue
     
     total_classes = max_masks_found + 1
+
+    print(f'total classes: {total_classes}')
     return max(2, total_classes)
