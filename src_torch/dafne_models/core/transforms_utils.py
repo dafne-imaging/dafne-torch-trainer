@@ -212,12 +212,17 @@ class PreprocessAnisotropy(MapTransform):
                 image, label = cropped_data["image"], cropped_data["mask"]
         else:
             d["original_shape"] = np.array(image.shape[1:])
-            box_start, box_end = generate_spatial_bounding_box(image, allow_smaller=True)
-            image = SpatialCrop(roi_start=box_start, roi_end=box_end)(image)
-            if has_mask:
-                label = SpatialCrop(roi_start=box_start, roi_end=box_end)(label)
-            d["bbox"] = np.vstack([box_start, box_end])
-            d["crop_shape"] = np.array(image.shape[1:])
+            box_start, box_end = generate_spatial_bounding_box(image, allow_smaller=True) #return pixels coordinates where the foreground is located
+            temp_image = SpatialCrop(roi_start=box_start, roi_end=box_end)(image) #return cropped image, 0 if the box_start=box_end
+            if 0 in temp_image.shape[1:]:
+                d["bbox"] = np.vstack([box_start, box_end])
+                d["crop_shape"] = np.array(image.shape[1:])
+            else: 
+                image = temp_image
+                if has_mask:
+                    label = SpatialCrop(roi_start=box_start, roi_end=box_end)(label)
+                d["bbox"] = np.vstack([box_start, box_end])
+                d["crop_shape"] = np.array(image.shape[1:])
 
         original_shape = image.shape[1:]
 
