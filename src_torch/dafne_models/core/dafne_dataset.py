@@ -106,8 +106,21 @@ class DafneDataset(Dataset):
             for f in self.data_files:
                 with np.load(f, mmap_mode='r') as npz_data:
                     depth = npz_data['data'].shape[2]
-                    for d in range(depth):
-                        data_dict.append({'filepath':f, 'index': d})
+                    has_mask = np.zeros(shape=depth, dtype=bool)
+                    mask_keys = sorted(k for k in npz_data.keys() if k.startswith('mask'))
+                    for mask_key in mask_keys:
+                        has_mask |= np.any(npz_data[mask_key], axis=(0,1))
+                    indices = set()
+                    positive_indices = np.where(has_mask)[0]
+                    for i in positive_indices:
+                        indices.update([i-1, i, i+1])
+                    indices = sorted(i for i in indices if i>=0 and i<depth)
+
+                    for i in indices:
+                        data_dict.append({
+                            'filepath': f,
+                            'index': i
+                        })
             
         if self.external_transforms is not None:
             self.transform = self.external_transforms
@@ -116,7 +129,7 @@ class DafneDataset(Dataset):
             raise ValueError('Any kind of transforms are defined for data!')
 
         super().__init__(data=data_dict, transform=self.transform)
-
+                   
     def __len__(self):
         return len(self.data)
     
