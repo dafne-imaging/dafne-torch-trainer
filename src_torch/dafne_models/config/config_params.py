@@ -14,7 +14,6 @@ class LoraConfig:
 @dataclass
 class DatasetConfig:
     root_dir: Optional[Path] = None
-    file_list: List[Path] = field(default_factory=list)
     val_split: float = 0.2
     random_seed: int = 42
     
@@ -28,7 +27,7 @@ class ModelConfig:
     # model parameters
     model_name: str = 'unet'
     spatial_dims: int = 3
-    n_classes: int = 2
+    out_channels: int = 2
     in_channels: int = 1
     use_dynamic: bool = False
     patch_size: tuple = None

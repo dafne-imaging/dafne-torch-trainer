@@ -98,3 +98,25 @@ class DatasetFingerprint():
         kernels.append(len(spacings) * [3])
 
         return kernels, strides
+    
+    @staticmethod
+    def count_label_mask(data_list: list):
+        max_masks_found = 0
+    
+        for i in range(len(data_list)):
+            filepath = data_list[i]
+            try:
+                # mmap_mode='r' legge solo l'header del file
+                with np.load(filepath, mmap_mode='r') as npz:
+                    keys = list(npz.keys())
+                    # Conta quante chiavi iniziano con 'mask'
+                    n_masks = len([k for k in keys if k.startswith('mask')])
+                    
+                    if n_masks > max_masks_found:
+                        max_masks_found = n_masks
+            except Exception:
+                continue
+    
+        total_classes = max(2, max_masks_found + 1)
+
+        return total_classes

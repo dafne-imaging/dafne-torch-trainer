@@ -24,12 +24,12 @@ class ModelFactory:
             model = dynamic_torch_model_obj.model
             
             try:
-                model_out_channels = dynamic_torch_model_obj.metadata['net_metadata'].get('n_classes')
+                model_out_channels = dynamic_torch_model_obj.metadata['net_metadata'].get('out_channels')
             except (AttributeError, KeyError):
                 model_out_channels = getattr(model, 'out_channels', None)
 
-            if config.n_classes != model_out_channels and hasattr(model, 'update_output_channels'):
-                model.update_output_channels(config.n_classes)
+            if config.out_channels != model_out_channels and hasattr(model, 'update_output_channels'):
+                model.update_output_channels(config.out_channels)
         
         else:
             model_class = ModelFactory._REGISTRY.get(config.model_name)
@@ -39,7 +39,7 @@ class ModelFactory:
             params = {
                 'in_channels': config.in_channels,
                 'spatial_dims': config.spatial_dims,
-                'out_channels': config.n_classes,
+                'out_channels': config.out_channels,
             }
             
             full_params = {**params, **config.extra_params}

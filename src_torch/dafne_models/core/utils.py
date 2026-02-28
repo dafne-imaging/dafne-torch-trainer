@@ -37,5 +37,4 @@ def count_label_mask(data_list: list):
     
     total_classes = max_masks_found + 1
 
-    print(f'total classes: {total_classes}')
     return max(2, total_classes)

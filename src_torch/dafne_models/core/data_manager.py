@@ -11,7 +11,6 @@ from ..config.config_params import (DatasetConfig,
                                     ModelConfig,
                                     AugmentationConfig)
 
-
 class DafneDataset(Dataset): 
     '''
         Class for loading npz dataset
@@ -152,19 +151,22 @@ class DafneDataModule():
         '''
         Create dataloaders
         '''
-        self.train_loader = DataLoader(self.train_dataset, 
+        train_loader = DataLoader(self.train_dataset, 
                                     batch_size=self.training_config.batch_size, 
                                     shuffle=True,
                                     collate_fn=pad_list_data_collate)
         
-        self.val_loader = DataLoader(self.val_dataset, 
+        val_loader = DataLoader(self.val_dataset, 
                                     batch_size=1, 
                                     shuffle=False,
                                     collate_fn=pad_list_data_collate)
+        self.train_loader = train_loader
+        self.val_loader = val_loader
+            
+        return train_loader, val_loader
 
     def get_dataloaders(self):
         '''
         Get dataloaders
         '''
         return self.train_loader, self.val_loader
-

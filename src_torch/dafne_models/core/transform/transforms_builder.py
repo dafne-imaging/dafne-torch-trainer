@@ -16,6 +16,7 @@ from monai.transforms import (
     DivisiblePadd
     )
 
+from ...config.config_params import ModelConfig, TrainingConfig
 from dafne_dl.DynamicTorchModel import DynamicTorchModel
 from ...utils.data_fingerprint import DatasetFingerprint
 from ...utils.optimizer import get_optimal_hyperparameters
@@ -92,7 +93,7 @@ def build_transform_list(keys:list,
         pipeline.extend([ToTensord(keys=['image', 'mask']), 
                          DivisiblePadd(keys=['image', 'mask'], k=32)])
     
-    return pipeline
+    return Compose(pipeline)
 
 
 def build_transforms_dynunet(keys: list,
@@ -147,7 +148,7 @@ def build_transforms_dynunet(keys: list,
         ToTensord(keys=keys)
     ])
 
-    return pipeline
+    return Compose(pipeline)
 
 
 class AbstractTransformBuilder(ABC):
@@ -162,8 +163,6 @@ class AbstractTransformBuilder(ABC):
                 training_config: TrainingConfig):
         self.model_config = model_config
         self.training_config = training_config
-        self.data_fingerprint = DatasetFingerprint(self.model_config.file_list, 
-                                                        spatial_dims=self.model_config.spatial_dims)
     
     @abstractmethod
     def build_transforms(self) -> (tuple, tuple):
@@ -184,8 +183,11 @@ class TransformBuilderTraining(AbstractTransformBuilder):
     for generic segmentation model and dynamic unet
     '''
     def __init__(self, model_config: ModelConfig, 
-                training_config: TrainingConfig):
+                training_config: TrainingConfig,
+                data_fingerprint: DatasetFingerprint
+                ):
         super().__init__(model_config, training_config)
+        self.data_fingerprint = data_fingerprint
     
     def build_transforms(self):
         '''
@@ -273,24 +275,6 @@ class TransformBuilderFineTuning(AbstractTransformBuilder):
                 training_config: TrainingConfig,
                 pretrained_model: DynamicTorchModel):
         super().__init__(model_config, training_config)
-        try:
-            net_params = pretrained_model.metadata['net_metadata']
-            self.initialize_model_params(net_params)
-        except Exception as e:
-            raise ValueError(f'Error loading model or pretrained weights: {e}')
-    
-    def initialize_model_params(self, net_params):
-        self.model_config.spatial_dims = net_params.get('spatial_dims')
-        self.model_config.n_classes = net_params.get('n_classes')
-        self.model_config.in_channels = net_params.get('in_channels')
-        self.model_config.use_dynamic = net_params.get('use_dynamic')
-        self.model_config.patch_size = net_params.get('patch_size')
-        self.model_config.median_shape = net_params.get('median_shape')
-        self.model_config.median_spacing = net_params.get('median_spacing')
-        self.model_config.n_levels = net_params.get('n_levels')
-
-        self.model_config.extra_params['kernels'] = net_params.get('kernels', None)
-        self.model_config.extra_params['strides'] = net_params.get('strides', None)
 
     def build_transforms(self):
         '''

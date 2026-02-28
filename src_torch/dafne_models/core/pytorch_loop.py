@@ -68,7 +68,7 @@ def pytorch_training_loop(model,
             epoch_loss += loss.item()
         
         if scheduler is not None:
-            current_lr = scheduler.get_last_lr()
+            #current_lr = scheduler.get_last_lr()
             scheduler.step()
 
         if check_stop is not None and check_stop():

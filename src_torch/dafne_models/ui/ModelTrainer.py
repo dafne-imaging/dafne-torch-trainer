@@ -1,23 +1,24 @@
 import os
 import sys
-import glob
 
 from ..core.training_worker import TrainingWorker
 from .ModelTrainer_Ui import Ui_ModelTrainerUI
 from .AugmentationDialog_Ui import AugmentationDialog
 from .FineTuningDialog import FineTuningDialog
 
-from PyQt5 import QtWidgets, QtGui, QtCore
-from PyQt5.QtCore import QObject, QVariant
+from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QPushButton, QLabel, QFileDialog, QSpinBox, QDoubleSpinBox, 
-    QTextEdit, QMessageBox, QGroupBox, QFormLayout, QDialog
+    QWidget, QVBoxLayout, QFileDialog, 
+    QMessageBox, QDialog
 )
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.colors import ListedColormap
-from matplotlib.ticker import FuncFormatter
+
+from ..config.config_params import ModelConfig, \
+                                        DatasetConfig, \
+                                        TrainingConfig, \
+                                        AugmentationConfig, \
+                                        LoraConfig
 
 import numpy as np
 
@@ -42,9 +43,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.save_path = None
         self.worker = None #training thread
-        self.image_paths = [] #path to images
-        self.mask_paths = [] #path to masks
-        self.train_params = {} #training params
         self.pretrained_path = None
 
         # augmentation params
@@ -121,10 +119,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.ax_preview = self.fig.add_subplot(122)
         self.ax_preview.set_title("Live Preview")
         self.ax_preview.axis('off')
-    
-    def toggle_advanced_option(self):
-        is_visible = self.advanced_widget.isVisible()
-        self.advanced_widget.setVisible(not is_visible)
     
     def open_augm_settings(self):
         dialog = AugmentationDialog(self, self.augm_params)
@@ -237,104 +231,27 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if not folder_path:
             return
         
-        self.image_paths = []
-        self.mask_paths = None
-        
-        self.location_Text.setText(folder_path)
-        extensions = ['.npz']
+        has_data = any(f.endswith('.npz') for root, _, files in os.walk(folder_path) for f in files)
 
-        found_files = self._scan_directory_folds(folder_path, extensions)
-        if not found_files:
-            QMessageBox.warning(self, "No data found", f'Folder selected does not contain valid extension {extensions}')
-            self.image_paths = []
+        if not has_data:
+            QMessageBox.warning(self, "No data found", "Folder selected does not contain valid .npz files!")
             self.fit_Button.setEnabled(False)
             return
 
-        self.image_paths = found_files
-        self.mask_paths = None
-
+        self.location_Text.setText(folder_path)
         self.fit_Button.setEnabled(True)
-        
-        QMessageBox.information(self, "Data loaded successfully", f"Found {len(found_files)} volumes")
+        QMessageBox.information(self, "Data Selected", "Dataset folder linked successfully. Ready to train.")
 
-    def _scan_directory(self, folder_path, extensions):
-        found_files = []
-        try:
-            for file in os.listdir(folder_path):
-                if any(file.endswith(ext) for ext in extensions):
-                    full_path = os.path.join(folder_path, file)
-                    found_files.append(full_path)
-            found_files.sort()
-            return found_files
-            
-        except Exception as e:
-            print(f"Error scanning directory {folder_path}: {e}")
-            return []
-    
-    def _scan_group_files(self, folder_path, extension):
-        '''
-        Scan input folder by the user recursively to group files by their parent directory. 
-        This is designed for 3D datasets where each subfolder represents a single volume or patient 
-        containing multiple slice files.
-        
-        Example of input folder: 
-        - .npz_folder
-            - patient 1
-                - slice 1
-                - slice 2 
-                -   ...
-                - slice n
-            - patient 2
-                - slice 1
-                - slice 2
-                -  ...
-                - slice n
-            -      ...
-            - patient n
-                - slice 1
-                - slice 2
-                -  ...
-                - slice n
-        '''
-
-        found_3d_volume = {}
-        try:
-            for root, _, files in os.walk(folder_path):
-                valid_files = [file for file in files if any(file.endswith(ext) for ext in extension)]
-                valid_files.sort()
-            
-                if valid_files:
-                    full_paths = [os.path.join(root, valid_file) for valid_file in valid_files]
-                    found_3d_volume[root] = full_paths
-
-        except Exception as e:
-            print(f"Error during 3D scan: {e}")
-        
-        return list(found_3d_volume.values())
-    
-    def _scan_directory_folds(self, folder_path, extensions):
-        found_files = []
-        try: 
-            for root, _, files in os.walk(folder_path, topdown=True):
-                for file in files: 
-                    if any(file.endswith(ext) for ext in extensions):
-                        full_path = os.path.join(root, file)
-                        found_files.append(full_path)
-            found_files.sort()
-            return found_files
-        except Exception as e:
-            print(f"Error scanning directory {folder_path}: {e}")
-            return []
 
     def update_progress_bar(self, percent):
         self.progressBar.setValue(percent)
     
     def start_training(self):
         #check if data are loaded
-        if not self.image_paths:
+        if not self.location_Text.text():
             QMessageBox.warning(self, 'Input Error', "No data loaded. Please select data first")
             return
-        
+
         # Update paths from text fields in case user edited them manually
         self.save_path = self.model_location_Text.text()
         self.pretrained_path = self.pretrained_location_Text.text()
@@ -381,53 +298,72 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         dyn_unet = self.check_auto_params.isChecked()
 
-        model_params = {
-            'spatial_dims': 3 if spatial_dims else 2,
-            'n_levels': n_levels,
-            'kernel_size': kernel_size,
-            'n_classes': 2,
-            'in_channels': 1,
-            'use_dynamic': dyn_unet
-        }
+        dataset_config = DatasetConfig(
+            root_dir=self.location_Text.text(),
+            val_split=0.2,
+            random_seed=42
+        )
 
-        # default values: to be change by the user
-        train_params = {
-            'epochs': epochs,
-            'learning_rate': lr,
-            'batch_size': batch_size,
-            'augmentation': self.augm_params,
-            'mixed_precision': self.mixed_precision_check.isChecked(),
-            'scheduler': self.scheduler_check.isChecked()
-        }
+        model_config = ModelConfig(
+            model_name='dynunet' if dyn_unet else 'unet',
+            spatial_dims=3 if spatial_dims else 2,
+            out_channels=2,
+            in_channels=1,
+            use_dynamic=dyn_unet,
+            extra_params={
+                'n_levels': n_levels,
+                'kernel_size': kernel_size,
+                'kernels': None,
+                'strides': None
+            }
+        )
+
+        augm_config = AugmentationConfig(
+            rotate=self.augm_params['rotate'],
+            flip_x=self.augm_params['flip_x'],
+            flip_y=self.augm_params['flip_y'],
+            zoom=self.augm_params['zoom'],
+            noise=self.augm_params['noise'],
+        )
+
+        train_config = TrainingConfig(
+            epochs=epochs,
+            learning_rate=lr,
+            batch_size=batch_size,
+            augmentation=augm_config,
+            pretrained_model_path=self.pretrained_path,
+            mixed_precision=self.mixed_precision_check.isChecked(),
+            early_stopping=early_stopping,
+            scheduler=self.scheduler_check.isChecked()
+        )
+
 
         # Add adaptation parameters
         mode = self.adaptation_params.get('mode', 'scratch')
         if mode == 'finetune':
-            train_params['percent_to_freeze'] = self.adaptation_params.get('freeze_degree', 0.5)
-            train_params['lora_config'] = None
+            model_config.fine_tuning = True
+            model_config.percent_to_freeze = self.adaptation_params.get('freeze_degree', 0.5)
         elif mode == 'lora':
-            train_params['percent_to_freeze'] = None
+            model_config.fine_tuning = True
+            model_config.percent_to_freeze = None
             # Default to all layers for now
-            train_params['lora_config'] = {
-                '.*': {
-                    'rank': self.adaptation_params.get('lora_rank', 8),
-                    'alpha': self.adaptation_params.get('lora_alpha', 16),
-                    'rank_for': 'channels'
-                }
-            }
+            model_config.lora_config = LoraConfig(
+                r=self.adaptation_params.get('lora_rank', 8),
+                lora_alpha=self.adaptation_params.get('lora_alpha', 16),
+                lora_dropout=0.1,
+                rank_for='channels',
+                target_modules=['.*']
+            )
         else: # scratch
-            train_params['percent_to_freeze'] = None
-            train_params['lora_config'] = None
-            self.pretrained_path = None # Ensure no pretrained path is used
+            model_config.fine_tuning = False
+            model_config.percent_to_freeze = None
+            model_config.lora_config = None
 
         self.worker = TrainingWorker(
-            file_list=self.image_paths,
-            model_params=model_params,
-            train_params=train_params,
-            pretrained_model_path=self.pretrained_path,
-            save_path=self.save_path,
-            early_stopping=early_stopping,
-            adaptation_params=self.adaptation_params
+            dataset_config = dataset_config,
+            model_config = model_config,
+            train_config = train_config,
+            save_path = self.save_path,
         )
 
         self.worker.sig_update_plot.connect(self.update_plots)
@@ -492,15 +428,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         
         if img.ndim == 3: img = img[0, :, :] # only the first channel
         img = self.restore_image_contrast(img)
-
-        # --- BLOCCO DI DEBUG (Da rimuovere dopo) ---
-        print("\n--- DEBUG VISUALIZZAZIONE ---")
-        print(f"1. Shape immagine a video (H, W): {img.shape}") 
-        # Es. (60, 320) significa 60 righe (Y), 320 colonne (X)
-        
-        print(f"2. Vettore Spacing ricevuto: {spacing}")
-        # Es. [1.18, 3.0, 1.18]
-        # -------------------------------------------
         
         pixel_aspect = 1.0 # isotropic 
         if spacing is not None and len(spacing) >= 2:
@@ -551,8 +478,6 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
     def _clear_paths_and_data(self):
         """Reset all paths, internal data lists and UI mode switches"""
-        self.image_paths = []
-        self.mask_paths = None
         self.save_path = None
         self.pretrained_path = None
         

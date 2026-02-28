@@ -1,4 +1,7 @@
+from dataclasses import asdict
 import torch.nn as nn
+
+from ..config.config_params import ModelConfig, TrainingConfig
 
 class DafneModelWrapper(nn.Module):
     '''
@@ -38,3 +41,29 @@ class DafneModelWrapper(nn.Module):
         model_dict.update(compatible_weights)
         self.model.load_state_dict(model_dict)
     
+    def get_state_dict(self, merge_lora=True):
+        if merge_lora and hasattr(self.model, 'get_merged_model'):
+            merged = self.model.get_merged_model()
+            return merged.state_dict()
+        return self.model.state_dict()
+    
+    def save_model_and_metadata(self, 
+                                model_config: ModelConfig,
+                                training_config: TrainingConfig, 
+                                save_path: str):
+        
+        from ..bin.create_torch_model import create_dynamic_model
+
+
+        net_metadata = {**asdict(model_config), **model_config.extra_params}
+        train_metadata = asdict(training_config)
+        
+        if save_path.endswith('.pth'):
+            save_path = save_path.replace('.pth', '.dafne')
+        elif not save_path.endswith('.dafne'):
+            save_path += '.dafne'
+            
+        with open(save_path, 'wb') as f:
+            create_dynamic_model(weights=self.get_state_dict(), 
+                                net_metadata=net_metadata, 
+                                train_metadata=train_metadata).dump(f)
