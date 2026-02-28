@@ -165,15 +165,15 @@ class AbstractTransformBuilder(ABC):
         self.training_config = training_config
     
     @abstractmethod
-    def build_transforms(self) -> (tuple, tuple):
+    def build_transforms(self):
         pass
     
     @abstractmethod
-    def get_transforms_static_model(self) -> (tuple, tuple):
+    def get_transforms_static_model(self):
         pass
     
     @abstractmethod
-    def get_transforms_dynamic_model(self) -> (tuple, tuple):
+    def get_transforms_dynamic_model(self):
         pass
 
 
@@ -193,7 +193,7 @@ class TransformBuilderTraining(AbstractTransformBuilder):
         '''
         Build transforms for training and validation
         '''
-        if self.training_config.use_dynamic and self.model_config.spatial_dims == 3:
+        if self.model_config.use_dynamic and self.model_config.spatial_dims == 3:
             return self.get_transforms_dynamic_model()
         else:
             return self.get_transforms_static_model()

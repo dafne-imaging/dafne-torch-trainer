@@ -62,10 +62,10 @@ class DafneDynUnetModel(nn.Module):
                 spatial_dims,
                 in_channels:int,
                 out_channels:int,
-                kernel_size:list,
+                kernels:list,
                 strides:list,
-                deep_supervision:bool,
-                norm_name
+                deep_supervision:bool=False,
+                norm_name=("INSTANCE", {"affine": True})
                 ):
         
         super().__init__()
@@ -77,7 +77,7 @@ class DafneDynUnetModel(nn.Module):
             spatial_dims=spatial_dims,
             in_channels=in_channels,
             out_channels=out_channels,
-            kernel_size=kernel_size,
+            kernel_size=kernels,
             strides=strides,
             upsample_kernel_size=strides[1:],
             deep_supervision=deep_supervision,

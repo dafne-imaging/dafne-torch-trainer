@@ -21,7 +21,7 @@ def apply_network_inf(model_obj, input_image):
         CastToTyped,
         DivisiblePadd
     )
-    from dafne_models.core.transforms_utils import PreprocessAnisotropy
+    from dafne_models.core.transform.custom_transforms import PreprocessAnisotropy
 
     if not input_image.shape[0] < input_image.shape[1]: 
         input_image = np.ascontiguousarray(np.moveaxis(input_image, -1, 0))
@@ -103,7 +103,7 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
     # BAKE METADATA INTO SOURCE (Must start at column 0 for exec)
     build_model_src = f"""
 def build_model():
-    from dafne_models.models.dafne_networks import DafneUnetModel, DafneDynUnet
+    from dafne_models.models.dafne_networks import DafneUnetModel, DafneDynUnetModel
     params = {repr(clean_params)}
     
     if params['use_dynamic']:

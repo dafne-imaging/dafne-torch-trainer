@@ -146,7 +146,6 @@ def pytorch_training_loop(model,
         dataset = valid_dataloader.dataset
         idx = rd.randrange(len(dataset))
         sample = dataset[idx]
-        raw_img = dataset.get_original_data(idx) #raw image from original dataset
         val_image = sample['image'].to(device)
         val_mask = sample['mask'].to(device)
 

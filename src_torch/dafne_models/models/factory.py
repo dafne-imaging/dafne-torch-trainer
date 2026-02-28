@@ -1,4 +1,5 @@
 import torch.nn as nn
+import inspect
 from .dafne_networks import DafneUnetModel, DafneDynUnetModel
 from ..config.config_params import ModelConfig
 from .lora.lora_models import LoRAModel
@@ -43,7 +44,11 @@ class ModelFactory:
             }
             
             full_params = {**params, **config.extra_params}
-            model = model_class(**full_params)
+
+            signature = inspect.signature(model_class.__init__)
+            valid_keys = [p.name for p in signature.parameters.values() if p.name != 'self']
+            filtered_params = {k: v for k, v in full_params.items() if k in valid_keys}
+            model = model_class(**filtered_params)
             
         if config.lora_config:
             target_modules = config.lora_config.target_modules or [".*"]
@@ -57,7 +62,7 @@ class ModelFactory:
             model = LoRAModel(model, lora_map)
             model.enable_adapter()
 
-        elif config.percent_to_freeze > 0:
+        elif config.percent_to_freeze is not None and config.percent_to_freeze > 0:
             ModelFactory.freeze_layers(model, config.percent_to_freeze)
         
         return model
