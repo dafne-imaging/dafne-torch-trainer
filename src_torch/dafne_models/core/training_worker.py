@@ -25,6 +25,10 @@ from ..bin.create_torch_model import create_dynamic_model
 from .transforms_builder import (build_transform_list, 
                                  build_transforms_dynunet)
 
+from .config.config_params import ModelConfig, DatasetConfig, TrainingConfig
+from ..models.factory import ModelFactory
+from ..models.wrapper import DafneModelWrapper
+from .manage_data import DafneDataModule
 
 
 class TrainingWorker(QThread):
@@ -55,30 +59,22 @@ class TrainingWorker(QThread):
     sig_stopped = pyqtSignal()
 
     def __init__(self,
-                 file_list:list,
-                 model_params:dict,
-                 train_params:dict, 
-                 pretrained_model_path:str=None, #.dafne file path
-                 save_path:str=None,
-                 early_stopping:bool=False,
-                 dyn_model_params:dict=None,
-                 adaptation_params:dict=None,
+                 dataset_config:DatasetConfig,
+                 model_config:ModelConfig,
+                 train_config:TrainingConfig, 
+                 save_path:str=None
                  ):
         
         super().__init__()
         
         # inzialize worker parameters
-        self.file_list = file_list
-        self.model_params = model_params
-        self.dyn_unet_params = dyn_model_params
-        self.train_params = train_params
-        self.save_path = save_path
-        self.adaptation_params = adaptation_params
-
+        self.file_list = []
         self.is_running = True
-        self.early_stopping = early_stopping
 
-        self.pretrained_model_path = pretrained_model_path
+        self.dataset_config = dataset_config
+        self.model_config = model_config
+        self.train_config = train_config
+        self.save_path = save_path
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -128,22 +124,12 @@ class TrainingWorker(QThread):
         :param self
         '''
         
-        if self.model_params['model_name'] == 'unet':
-            return DafneUnetModel(spatial_dims=self.model_params.get('spatial_dims', 2),
-                                n_levels=self.model_params.get('n_levels', 5),
-                                kernel_size=self.model_params.get('kernel_size', 3),
-                                out_channels=self.model_params['n_classes'],
-                                in_channels=self.model_params.get('in_channels', 1))
-        elif self.model_params['model_name'] == 'dynunet':
-            return DafneDynUnet(spatial_dims = self.model_params.get('spatial_dims', 3),
-                                in_channels=self.model_params.get('in_channels', 1),
-                                out_channels=self.model_params['n_classes'],
-                                kernel_size=self.model_params.get('kernels'),
-                                strides=self.model_params.get('strides'),
-                                norm_name=("INSTANCE", {"affine": True}),
-                                deep_supervision=False)
-        else:
-            raise ValueError(f'Model {self.model_params["model_name"]} not found')
+        core_model = ModelFactory.create_model(self.model_config)
+        self.model = DafneModelWrapper(core_model, self.device)
+        self.model.to(self.device)
+
+        if self.train_config.pretrained_model_path is not None:
+            self.model.load_weights(torch.load(self.train_config.pretrained_model_path))
 
     def _setup_training(self):
         '''
@@ -152,23 +138,13 @@ class TrainingWorker(QThread):
         
         :param n_classes: number of classes
         '''
-        spatial_dims = self.model_params.get('spatial_dims', 3)
-        use_dynamic = self.model_params.get('use_dynamic', False)
-        augm_params = self.train_params.get('augmentation', {})
-        batch_size = self.train_params.get('batch_size', 2)
+        spatial_dims = self.model_config.spatial_dims
+        use_dynamic = self.model_config.use_dynamic
+        augm_params = self.train_config.augmentation
 
         fingerprint = DatasetFingerprint(self.file_list, spatial_dims=spatial_dims)
         median_spacing = fingerprint.data_spacing
         median_shape = fingerprint.data_shape
-       
-        self.model_params['kernels'] = None
-        self.model_params['strides'] = None
-        self.model_params['data_shape'] = median_shape
-        self.model_params['median_spacing'] = median_spacing
-        self.model_params['spatial_dims'] = spatial_dims
-        self.model_params['in_channels'] = self.model_params.get('in_channels', 1)
-        self.model_params['out_channels'] = self.model_params.get('n_classes', 2)
-        self.model_params['n_levels'] = self.model_params.get('n_levels', 5)
 
         # dynamic mode
         if use_dynamic and spatial_dims == 3:

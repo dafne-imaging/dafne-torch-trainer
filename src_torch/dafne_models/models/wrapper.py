@@ -37,3 +37,4 @@ class DafneModelWrapper(nn.Module):
         
         model_dict.update(compatible_weights)
         self.model.load_state_dict(model_dict)
+    

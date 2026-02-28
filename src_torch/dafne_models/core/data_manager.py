@@ -167,3 +167,4 @@ class DafneDataModule():
         Get dataloaders
         '''
         return self.train_loader, self.val_loader
+

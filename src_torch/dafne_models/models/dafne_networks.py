@@ -57,7 +57,7 @@ class DafneUnetModel(nn.Module):
 # here users can define other model classes if needed
 
 
-class DafneDynUnet(nn.Module):
+class DafneDynUnetModel(nn.Module):
     def __init__(self,
                 spatial_dims,
                 in_channels:int,
