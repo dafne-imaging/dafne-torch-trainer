@@ -1,4 +1,3 @@
-from monai.handlers import ParamSchedulerHandler
 import os
 import torch
 import random as rd
@@ -61,6 +60,7 @@ def pytorch_training_loop(model,
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
             scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) #gradient clipping
             scaler.step(optimizer)
             scaler.update()
@@ -87,7 +87,10 @@ def pytorch_training_loop(model,
         ])
 
         if torch.cuda.is_available():
-            del_from_gpu(inputs, targets)
+            try:
+                del_from_gpu(inputs, targets)
+            except NameError:
+                pass
 
         with torch.no_grad():
             for batch in valid_dataloader:

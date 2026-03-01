@@ -1,6 +1,5 @@
 #see https://medium.com/@adimodi96/extending-low-rank-adaptation-lora-to-convolution-layers-38d67fa777cb for more details
 
-from tempfile import gettempdir
 import torch
 from torch import Tensor
 import torch.nn as nn

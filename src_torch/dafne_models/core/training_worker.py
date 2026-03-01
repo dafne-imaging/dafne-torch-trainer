@@ -99,33 +99,6 @@ class TrainingWorker(QThread):
         '''
         self.sig_status.emit(message)
     
-    def _save_model(self):
-        return
-
-    def _save_model_params(self, params):
-        '''
-        Save model params in json file
-        '''
-    
-    def _setup_model(self):
-        '''
-        Setup model for training model from scratch
-        
-        :param self
-        '''
-        
-        core_model = ModelFactory.create_model(self.model_config)
-        self.model = DafneModelWrapper(core_model, self.device)
-        self.model.to(self.device)
-
-        if self.train_config.pretrained_model_path is not None:
-            self.model.load_weights(torch.load(self.train_config.pretrained_model_path))
-
-
-    def _save_model_params(self):
-        # here save params dictionary to json file    
-        return
-    
     def run(self):
         '''
         Run training loop
@@ -140,7 +113,7 @@ class TrainingWorker(QThread):
             self.sig_status.emit(f"Training initialization on: {self.device} device")
             self.sig_status.emit(f"Dataset loading ({len(data_list)} files...)")
 
-            data_fingerprint = DatasetFingerprint(data_list, spatial_dims=self.model_config.spatial_dims)
+            data_fingerprint = DatasetFingerprint(data_module.train_files, spatial_dims=self.model_config.spatial_dims)
 
             if self.model_config.fine_tuning:
                 self.sig_status.emit("Fine-tuning mode")
@@ -172,7 +145,7 @@ class TrainingWorker(QThread):
             data_module.create_datasets(train_transforms, val_transforms) # create datasets
             train_loader, val_loader = data_module.create_dataloaders() # create dataloaders
 
-            out_channels = data_fingerprint.count_label_mask(data_list)
+            out_channels = data_fingerprint.count_label_mask(data_module.train_files) #compute n_classes on train files
             self.model_config.out_channels = out_channels
 
             core_model = ModelFactory.create_model(self.model_config, loaded_obj)

@@ -68,4 +68,3 @@ class TrainingConfig:
     mixed_precision: bool = False
     early_stopping: bool = False
     scheduler: bool = False
-    mixed_precision: bool = False

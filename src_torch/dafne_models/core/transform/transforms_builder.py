@@ -205,8 +205,8 @@ class TransformBuilderTraining(AbstractTransformBuilder):
         median_spacing = self.data_fingerprint.data_spacing
         median_shape = self.data_fingerprint.data_shape
 
-        axis_divisors = np.prod(self.model_config.extra_params['strides'], axis=0) if \
-                self.model_config.extra_params['strides'] is not None else None
+        axis_divisors = np.prod(self.model_config.extra_params.get('strides'), axis=0) if \
+                self.model_config.extra_params.get('strides') is not None else None
 
         patch_size, batch_size = get_optimal_hyperparameters(
             median_shape, spatial_dims=self.model_config.spatial_dims, is_finetune=False,
@@ -246,7 +246,7 @@ class TransformBuilderTraining(AbstractTransformBuilder):
         Build transforms for unet
         '''
             
-        self.model_config.patch_size = (16, 96, 96)
+        self.model_config.patch_size = (16, 96, 96) if self.model_config.spatial_dims == 3 else None
         median_spacing = self.data_fingerprint.data_spacing
         
         augm_params_dict = asdict(self.training_config.augmentation)
@@ -273,14 +273,14 @@ class TransformBuilderFineTuning(AbstractTransformBuilder):
 
     def __init__(self, model_config: ModelConfig, 
                 training_config: TrainingConfig,
-                pretrained_model: DynamicTorchModel):
+                ):
         super().__init__(model_config, training_config)
 
     def build_transforms(self):
         '''
         Build transforms for fine-tuning
         '''
-        if self.training_config.use_dynamic and self.model_config.spatial_dims == 3:
+        if self.model_config.use_dynamic and self.model_config.spatial_dims == 3:
             return self.get_transforms_dynamic_model()
         else:
             return self.get_transforms_static_model()
