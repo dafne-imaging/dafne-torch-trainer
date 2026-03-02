@@ -1,10 +1,3 @@
-import os
-import sys
-
-import numpy as np
-import torch
-
-import torch
 import numpy as np
 
 
@@ -99,8 +92,22 @@ class DatasetFingerprint():
 
         return kernels, strides
     
+    def get_labels_name(self) -> list[str]:
+        labels_name = set()
+
+        for i in range(len(self.data_list)):
+            filepath = self.data_list[i]
+            try: 
+                with np.load(filepath, mmap_mode='r') as npz_data:
+                    keys = list(npz_data.keys())
+                    labels_name.update(k for k in keys if k.startswith('mask'))
+            except Exception:
+                continue
+
+        return sorted(list(labels_name))
+
     @staticmethod
-    def count_label_mask(data_list: list):
+    def count_label_mask(data_list: list[str]) -> int:
         max_masks_found = 0
     
         for i in range(len(data_list)):

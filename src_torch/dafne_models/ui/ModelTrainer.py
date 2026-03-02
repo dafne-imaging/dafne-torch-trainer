@@ -12,6 +12,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QDialog
 )
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 from ..config.config_params import ModelConfig, \
@@ -413,8 +414,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             img_vis[mask_nonzero] = (img_vis[mask_nonzero] - min_val) / (max_val - min_val + 1e-8)
         return img_vis
     
-    @QtCore.pyqtSlot(float, object, object, float, object, float)
-    def update_plots(self, loss, img, mask, val_loss, spacing, best_dice):
+    @QtCore.pyqtSlot(float, object, object, float, object, float, dict)
+    def update_plots(self, loss, img, mask, val_loss, spacing, best_dice, per_mask_dice):
         self.loss_history.append(loss)
         self.val_loss_history.append(val_loss)
         self.ax_loss.clear()
@@ -443,8 +444,23 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         if mask is not None: 
             masked = np.ma.masked_where(mask == 0, mask)
-            self.ax_preview.imshow(masked, cmap='tab20', alpha=0.5, aspect=pixel_aspect)
-        
+            vmin = 0
+            vmax = self.model_config.out_channels
+            im = self.ax_preview.imshow(masked, cmap='tab20', alpha=0.5, aspect=pixel_aspect, vmin=vmin, vmax=vmax)
+            if per_mask_dice:
+                legend_elements = []
+                cmap = plt.get_cmap('tab20')
+                for i, (name, score) in enumerate(per_mask_dice.items()):
+                    color_idx = (i + 1) / vmax if vmax > 0 else 0
+                    color = cmap(color_idx)
+                    legend_elements.append(Patch(facecolor=color, 
+                                                label=f"{name}: {score:.3f}", 
+                                                alpha=0.6))
+                self.ax_preview.legend(handles=legend_elements, 
+                                     loc='upper left', 
+                                     bbox_to_anchor=(1.05, 1), 
+                                     fontsize='small',
+                                     title="Dice per Organ")
         self.ax_preview.axis('off')
         self.canvas.draw()
 

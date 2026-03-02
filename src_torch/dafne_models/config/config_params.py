@@ -34,6 +34,7 @@ class ModelConfig:
     median_shape: tuple = None
     median_spacing: tuple = None
     n_levels: int = 5
+    labels_name: List[str] = None
     
     # specific model parameters for monai model
     extra_params: dict = field(default_factory=dict)
@@ -68,3 +69,21 @@ class TrainingConfig:
     mixed_precision: bool = False
     early_stopping: bool = False
     scheduler: bool = False
+
+
+@dataclass
+class InferenceMetricsConfig:
+    '''
+    Configuration class for inference metrics.
+    '''
+    include_background: bool = False
+    reduction: str = "mean_batch"
+
+    compute_jaccard: bool = True
+    compute_hausdorff_95: bool = True
+    compute_surface_distance: bool = True
+    compute_precision: bool = True
+    compute_recall: bool = True
+
+    hd_percentile: float = 95.0
+    sd_percentile: float = 95.0

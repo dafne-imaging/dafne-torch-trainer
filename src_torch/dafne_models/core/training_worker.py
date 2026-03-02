@@ -2,6 +2,7 @@ import os
 import traceback
 import random as rd
 import numpy as np
+from dataclasses import asdict
 
 import torch
 from torch.optim.lr_scheduler import CosineAnnealingLR
@@ -15,7 +16,7 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from .pytorch_loop import pytorch_training_loop
 from ..utils.data_fingerprint import DatasetFingerprint
 
-from ..config.config_params import ModelConfig, DatasetConfig, TrainingConfig
+from ..config.config_params import ModelConfig, DatasetConfig, TrainingConfig, InferenceMetricsConfig
 from ..models.factory import ModelFactory
 from ..models.wrapper import DafneModelWrapper
 from .data_manager import DafneDataModule
@@ -32,7 +33,7 @@ class TrainingWorker(QThread):
     '''
     
     # Send data to cpu (float, numpy, numpy, float, numpy, float)
-    sig_update_plot = pyqtSignal(float, object, object, float, object, float)
+    sig_update_plot = pyqtSignal(float, object, object, float, object, float, dict)
 
     # Send status information for user console
     sig_status = pyqtSignal(str)
@@ -53,6 +54,7 @@ class TrainingWorker(QThread):
                  dataset_config:DatasetConfig,
                  model_config:ModelConfig,
                  train_config:TrainingConfig, 
+                 inference_metrics:InferenceMetricsConfig,
                  save_path:str=None
                  ):
         
@@ -64,17 +66,18 @@ class TrainingWorker(QThread):
         self.dataset_config = dataset_config
         self.model_config = model_config
         self.train_config = train_config
+        self.inference_metrics = inference_metrics
         self.save_path = save_path
 
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    def _callback_epoch_end(self, epoch, loss, img, mask, val_loss, spacing, best_dice):
+    def _callback_epoch_end(self, epoch, loss, img, mask, val_loss, spacing, best_dice, per_mask_dice_score):
         
         '''
         Function called at the end of each epoch by the Engine
         '''
 
-        self.sig_update_plot.emit(loss, img, mask, val_loss, spacing, best_dice)
+        self.sig_update_plot.emit(loss, img, mask, val_loss, spacing, best_dice, per_mask_dice_score)
         total_epochs = self.train_config.epochs
         current_epoch = epoch + 1
         percent = int((current_epoch / total_epochs) * 100)
@@ -114,7 +117,8 @@ class TrainingWorker(QThread):
             self.sig_status.emit(f"Dataset loading ({len(data_list)} files...)")
 
             data_fingerprint = DatasetFingerprint(data_module.train_files, spatial_dims=self.model_config.spatial_dims)
-
+            self.model_config.labels_name = data_fingerprint.get_labels_name()
+            
             if self.model_config.fine_tuning:
                 self.sig_status.emit("Fine-tuning mode")
 
@@ -131,6 +135,7 @@ class TrainingWorker(QThread):
                 self.model_config.median_shape = net_params.get('median_shape')
                 self.model_config.median_spacing = net_params.get('median_spacing')
                 self.model_config.n_levels = net_params.get('n_levels', None)
+                self.model_config.labels_name = net_params.get('labels_name', None)
                 self.model_config.extra_params['n_levels'] = net_params.get('n_levels', None)
                 self.model_config.extra_params['kernel_size'] = net_params.get('kernel_size', None)
                 self.model_config.extra_params['kernels'] = net_params.get('kernels', None)
@@ -186,7 +191,9 @@ class TrainingWorker(QThread):
                 mixed_precision=self.train_config.mixed_precision,
                 spatial_dims=self.model_config.spatial_dims,
                 val_roi_size=self.model_config.patch_size,
-                model_name=self.model_config.model_name
+                model_name=self.model_config.model_name,
+                labels_name=self.model_config.labels_name,
+                inference_metrics=asdict(self.inference_metrics)
             )
 
             save_dir = os.path.dirname(self.save_path)

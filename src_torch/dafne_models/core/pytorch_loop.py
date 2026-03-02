@@ -1,13 +1,28 @@
 import os
+import csv
 import torch
 import random as rd
 
-from monai.metrics import DiceMetric
+from monai.metrics import  (DiceMetric, 
+                            JaccardMetric, 
+                            HausdorffDistanceMetric, 
+                            SurfaceDistanceMetric, 
+                            PrecisionMetric, 
+                            RecallMetric)
 from monai.data import decollate_batch
 from monai.inferers import sliding_window_inference
 from monai.transforms import Compose, AsDiscrete
 
 PATIENT = 20
+
+MONAI_REGISTRY = {
+    'dice': DiceMetric,
+    'jaccard': JaccardMetric,
+    'hausdorff_95': HausdorffDistanceMetric,
+    'surface_distance': SurfaceDistanceMetric,
+    'precision': PrecisionMetric,
+    'recall': RecallMetric
+}
 
 # definition of classic training loop
 # with FP16 precision and autocast
@@ -28,14 +43,42 @@ def pytorch_training_loop(model,
                           on_epoch_end=None,
                           check_stop=None,
                           on_log=None,
-                          val_roi_size=None
+                          val_roi_size=None,
+                          labels_name:list[str]=None,
+                          inference_metrics=None
                           ):
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
     
-    dice_metric = DiceMetric(include_background=False, reduction='mean')
+    dice_metric = DiceMetric(include_background=False, reduction='mean_batch')
     best_val_dice_score = -float("inf")
     counter = 0
+
+    history_metrics = []
+    active_metrics = {}
+    metrics_to_log = {'epoch': 0, 
+                        'train_loss': 0.0, 
+                        'val_loss': 0.0,
+                        'dice_avg': 0.0}
+    for key, value in inference_metrics.items():
+        if key.startswith('compute_') and value:
+            metric = key.replace('compute_', '')
+            if metric in MONAI_REGISTRY:
+                active_metrics[metric] = MONAI_REGISTRY[metric](
+                    include_background=inference_metrics['include_background'], 
+                    reduction=inference_metrics['reduction']
+                )
+                metrics_to_log[f'avg_{metric}'] = 0.0
+                if labels_name:
+                    for label in labels_name:
+                        metrics_to_log[f'{metric}_{label}'] = 0.0
+            else:
+                if on_log: on_log(f"Metric {metric} not found in MONAI_REGISTRY")
+    if labels_name:
+        for label in labels_name:
+            metrics_to_log[f'dice_{label}'] = 0.0
+    if save_path:
+        csv_path = save_path.replace('.dafne', '.csv')
 
     scaler = torch.amp.GradScaler(enabled=mixed_precision)
 
@@ -49,6 +92,9 @@ def pytorch_training_loop(model,
         # classic pytorch training loop defined
         model.train()
         epoch_loss = 0.0
+        avg_loss = 0.0
+        avg_val_loss = 0.0
+        metrics_to_log['epoch'] = epoch + 1
         
         for batch in train_dataloader:
             if check_stop is not None and check_stop():
@@ -91,7 +137,8 @@ def pytorch_training_loop(model,
                 del_from_gpu(inputs, targets)
             except NameError:
                 pass
-
+        
+        per_mask_dice_score = {}
         with torch.no_grad():
             for batch in valid_dataloader:
                 if check_stop is not None and check_stop():
@@ -107,20 +154,41 @@ def pytorch_training_loop(model,
                 val_label_decollate = decollate_batch(val_mask)
                 val_preds = [post_pred(i) for i in val_output_decollate]
                 val_masks = [post_label(i) for i in val_label_decollate]
-                
                 dice_metric(y_pred=val_preds, y=val_masks)
                 val_loss += criterion(val_output, val_mask).item()
+
+                for metric in active_metrics.values():
+                    metric(y_pred=val_preds, y=val_masks)
             
             if check_stop is not None and check_stop():
                 break
-
-            dice_score = dice_metric.aggregate().item()
+            
+            # compute dice score metrics
+            dice_score = dice_metric.aggregate() # mean of all batches for each mask
+            dice_score_avg = dice_score.mean().item() # mean of all masks
             avg_val_loss = val_loss / len(valid_dataloader)
-
+            per_mask_dice_score = {name: dice_score[i].item() for i, name in enumerate(labels_name)}
             dice_metric.reset()
 
-            if dice_score > best_val_dice_score:
-                best_val_dice_score = dice_score
+            metrics_to_log['train_loss'] = avg_loss
+            metrics_to_log['val_loss'] = avg_val_loss
+            metrics_to_log['dice_avg'] = dice_score_avg
+
+            if labels_name:
+                for label in labels_name:
+                    metrics_to_log[f'dice_{label}'] = per_mask_dice_score[label]
+
+            for metric_name, metric in active_metrics.items():
+                metric_score = metric.aggregate()
+                metric_score_avg = metric_score.mean().item()
+                per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
+                metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
+                for label in labels_name:
+                    metrics_to_log[f'{metric_name}_{label}'] = per_mask_metric_score[label]
+                metric.reset()
+
+            if dice_score_avg > best_val_dice_score:
+                best_val_dice_score = dice_score_avg
                 counter = 0
             
                 if save_path:
@@ -179,8 +247,24 @@ def pytorch_training_loop(model,
             # send to GUI for each epoch, the current epoch, avg_loss and rand image
             # and his model predicted mask
             if on_epoch_end:    
-                on_epoch_end(epoch, avg_loss, img_np, pred_np, avg_val_loss, img_spacing, best_val_dice_score)
-       
+                on_epoch_end(epoch, 
+                            avg_loss, 
+                            img_np, pred_np, 
+                            avg_val_loss, 
+                            img_spacing, 
+                            best_val_dice_score,
+                            per_mask_dice_score
+                            )
+        
+        history_metrics.append(metrics_to_log)
+        if save_path: 
+            file_exists = os.path.exists(csv_path)
+            with open(csv_path, 'a', newline='') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=metrics_to_log.keys())
+                if not file_exists:
+                    writer.writeheader()
+                writer.writerow(metrics_to_log)
+
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
     # delete tensors and model from gpu memory

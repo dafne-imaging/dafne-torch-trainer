@@ -107,7 +107,7 @@ def build_model():
     params = {repr(clean_params)}
     
     if params['use_dynamic']:
-        return DafneDynUnet(
+        return DafneDynUnetModel(
             spatial_dims=params['spatial_dims'],
             in_channels=params['in_channels'],
             out_channels=params['out_channels'],
