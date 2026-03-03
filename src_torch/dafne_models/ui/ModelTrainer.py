@@ -19,7 +19,8 @@ from ..config.config_params import ModelConfig, \
                                         DatasetConfig, \
                                         TrainingConfig, \
                                         AugmentationConfig, \
-                                        LoraConfig
+                                        LoraConfig, \
+                                        InferenceConfig
 
 import numpy as np
 
@@ -338,6 +339,11 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             scheduler=self.scheduler_check.isChecked()
         )
 
+        inference_config = InferenceConfig(
+            include_background=self.inference_params.get('include_background', False),
+            reduction=self.inference_params.get('reduction', 'mean_batch')
+        )
+
 
         # Add adaptation parameters
         mode = self.adaptation_params.get('mode', 'scratch')
@@ -364,6 +370,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             dataset_config = dataset_config,
             model_config = model_config,
             train_config = train_config,
+            inference_config = inference_config,
             save_path = self.save_path,
         )
 
