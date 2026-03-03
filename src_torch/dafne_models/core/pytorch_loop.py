@@ -4,11 +4,10 @@ import torch
 import random as rd
 
 from monai.metrics import  (DiceMetric, 
-                            JaccardMetric, 
                             HausdorffDistanceMetric, 
                             SurfaceDistanceMetric, 
-                            PrecisionMetric, 
-                            RecallMetric)
+                            ConfusionMatrixMetric,
+                            compute_confusion_matrix_metric)
 from monai.data import decollate_batch
 from monai.inferers import sliding_window_inference
 from monai.transforms import Compose, AsDiscrete
@@ -16,12 +15,11 @@ from monai.transforms import Compose, AsDiscrete
 PATIENT = 20
 
 MONAI_REGISTRY = {
-    'dice': DiceMetric,
-    'jaccard': JaccardMetric,
     'hausdorff_95': HausdorffDistanceMetric,
     'surface_distance': SurfaceDistanceMetric,
-    'precision': PrecisionMetric,
-    'recall': RecallMetric
+    'precision': ConfusionMatrixMetric,
+    'recall': ConfusionMatrixMetric,
+    'jaccard': ConfusionMatrixMetric
 }
 
 # definition of classic training loop
@@ -179,7 +177,16 @@ def pytorch_training_loop(model,
                     metrics_to_log[f'dice_{label}'] = per_mask_dice_score[label]
 
             for metric_name, metric in active_metrics.items():
-                metric_score = metric.aggregate()
+                metric_res = metric.aggregate() # Tensor from metrics
+                
+                # Special case: Confusion Matrix based metrics
+                if isinstance(metric, ConfusionMatrixMetric):
+                    # compute final scores (per class)
+                    metric_score = compute_confusion_matrix_metric(metric_name, metric_res)
+                else: 
+                    # standard monai metrics
+                    metric_score = metric_res
+
                 metric_score_avg = metric_score.mean().item()
                 per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
                 metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
