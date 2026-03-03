@@ -452,7 +452,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if mask is not None: 
             masked = np.ma.masked_where(mask == 0, mask)
             vmin = 0
-            vmax = self.model_config.out_channels
+            vmax = model_config.out_channels
             im = self.ax_preview.imshow(masked, cmap='tab20', alpha=0.5, aspect=pixel_aspect, vmin=vmin, vmax=vmax)
             if per_mask_dice:
                 legend_elements = []
