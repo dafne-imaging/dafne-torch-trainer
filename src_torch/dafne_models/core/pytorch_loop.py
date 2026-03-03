@@ -65,7 +65,7 @@ def pytorch_training_loop(model,
         if key.startswith('compute_') and value:
             metric = key.replace('compute_', '')
             if metric in MONAI_REGISTRY:
-                if isinstance(MONAI_REGISTRY[metric], ConfusionMatrixMetric):
+                if issubclass(MONAI_REGISTRY[metric], ConfusionMatrixMetric):
                     metric_monai_name = metric.replace('_', ' ')
                     active_metrics[metric] = MONAI_REGISTRY[metric](
                         include_background=inference_metrics['include_background'], 
@@ -195,7 +195,9 @@ def pytorch_training_loop(model,
                     metric_score = torch.cat(metric_score, dim=0)
 
                 metric_score_avg = metric_score.mean().item()
-                per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
+                incl_bg = inference_metrics['include_background']
+                active_scores = metric_score[1:] if incl_bg else metric_score
+                per_mask_metric_score = {name: active_scores[i].item() for i, name in enumerate(labels_name)}
                 metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
                 for label in labels_name:
                     metrics_to_log[f'{metric_name}_{label}'] = per_mask_metric_score[label]
@@ -283,14 +285,17 @@ def pytorch_training_loop(model,
                 if key == 'epoch' or val is None: 
                     continue
                 # Organization tags for cleaner TensorBoard UI
-                tag = key.replace('train_', 'Loss/').replace('val_', 'Loss/').replace('dice_', 'Dice/')
+                if key.startswith('train_'):
+                    tag = 'Loss/train_' + key[len('train_'):]
+                elif key.startswith('val_'):
+                    tag = 'Loss/val_' + key[len('val_'):]
+                elif key.startswith('dice_'):
+                    tag = 'Dice/' + key[len('dice_'):]
+                elif key.startswith('avg_'):
+                    tag = 'Metrics/' + key
+                else:
+                    tag = 'Metrics/' + key
                 tb_writer.add_scalar(tag, val, epoch)
-            
-            # Optional: log the preview image to TensorBoard as well
-            if 'img_np' in locals() and 'pred_np' in locals():
-                # Normalized images for display
-                tb_writer.add_image('Preview/Image', img_np, epoch, dataformats='HW')
-                tb_writer.add_image('Preview/Prediction', pred_np, epoch, dataformats='HW')
 
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
