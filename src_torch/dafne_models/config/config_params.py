@@ -79,11 +79,14 @@ class InferenceMetricsConfig:
     include_background: bool = False
     reduction: str = "mean_batch"
 
-    compute_jaccard: bool = True
     compute_hausdorff_95: bool = True
     compute_surface_distance: bool = True
     compute_precision: bool = True
-    compute_recall: bool = True
+    compute_sensitivity: bool = True
+    compute_specificity: bool = True
+    compute_accuracy: bool = True
+    compute_f1_score: bool = True
+    compute_threat_score: bool = True
 
     hd_percentile: float = 95.0
     sd_percentile: float = 95.0

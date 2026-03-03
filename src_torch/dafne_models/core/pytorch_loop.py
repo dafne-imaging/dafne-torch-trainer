@@ -18,8 +18,11 @@ MONAI_REGISTRY = {
     'hausdorff_95': HausdorffDistanceMetric,
     'surface_distance': SurfaceDistanceMetric,
     'precision': ConfusionMatrixMetric,
-    'recall': ConfusionMatrixMetric,
-    'jaccard': ConfusionMatrixMetric
+    'sensitivity': ConfusionMatrixMetric,
+    'threat_score': ConfusionMatrixMetric,
+    'specificity': ConfusionMatrixMetric,
+    'accuracy': ConfusionMatrixMetric,
+    'f1_score': ConfusionMatrixMetric,
 }
 
 # definition of classic training loop
