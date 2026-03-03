@@ -1,4 +1,5 @@
 import torch
+import os
 import random as rd
 from torch.utils.tensorboard import SummaryWriter
 
@@ -187,17 +188,7 @@ def pytorch_training_loop(model,
             dice_metric.reset()
 
             for metric_name, metric in active_metrics.items():
-                metric_res = metric.aggregate()
-                
-                if isinstance(metric, ConfusionMatrixMetric):
-                    if isinstance(metric_res, list):
-                        metric_res = torch.cat(metric_res, dim=0)
-                    
-                    # Convert internal name (with underscores) to MONAI name (with spaces)
-                    monai_name = metric_name.replace('_', ' ')
-                    metric_score = compute_confusion_matrix_metric(monai_name, metric_res)
-                else:
-                    metric_score = metric_res
+                metric_score = metric.aggregate()
 
                 metric_score_avg = metric_score.mean().item()
                 per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
