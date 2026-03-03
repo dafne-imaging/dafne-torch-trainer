@@ -340,8 +340,8 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         )
 
         inference_config = InferenceMetricsConfig(
-            include_background=self.inference_params.get('include_background', False),
-            reduction=self.inference_params.get('reduction', 'mean_batch')
+            include_background=False,
+            reduction='mean_batch'
         )
 
 
