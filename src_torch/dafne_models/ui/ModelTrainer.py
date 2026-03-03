@@ -20,7 +20,7 @@ from ..config.config_params import ModelConfig, \
                                         TrainingConfig, \
                                         AugmentationConfig, \
                                         LoraConfig, \
-                                        InferenceConfig
+                                        InferenceMetricsConfig
 
 import numpy as np
 
@@ -339,7 +339,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             scheduler=self.scheduler_check.isChecked()
         )
 
-        inference_config = InferenceConfig(
+        inference_config = InferenceMetricsConfig(
             include_background=self.inference_params.get('include_background', False),
             reduction=self.inference_params.get('reduction', 'mean_batch')
         )
