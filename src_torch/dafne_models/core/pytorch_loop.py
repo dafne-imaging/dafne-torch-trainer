@@ -66,11 +66,11 @@ def pytorch_training_loop(model,
             metric = key.replace('compute_', '')
             if metric in MONAI_REGISTRY:
                 if isinstance(MONAI_REGISTRY[metric], ConfusionMatrixMetric):
-                    metric = metric.replace('_', ' ')
+                    metric_monai_name = metric.replace('_', ' ')
                     active_metrics[metric] = MONAI_REGISTRY[metric](
                         include_background=inference_metrics['include_background'], 
                         reduction=inference_metrics['reduction'],
-                        metric_name=metric
+                        metric_name=metric_monai_name
                     )
                 else:
                     active_metrics[metric] = MONAI_REGISTRY[metric](
@@ -98,8 +98,10 @@ def pytorch_training_loop(model,
             if on_log: on_log(f"Training stopped by user")
             break
         
-        # classic pytorch training loop defined
-        # Crea una copia del template completo preparato all'inizio
+        epoch_loss = 0.0
+        avg_loss = 0.0
+        avg_val_loss = 0.0
+        per_mask_dice_score = {}
         metrics_to_log = metrics_to_log.copy()
         
         metrics_to_log['epoch'] = epoch + 1
@@ -107,6 +109,7 @@ def pytorch_training_loop(model,
         metrics_to_log['val_loss'] = 0.0
         metrics_to_log['dice_avg'] = 0.0
         
+        model.train()
         for batch in train_dataloader:
             if check_stop is not None and check_stop():
                 break
