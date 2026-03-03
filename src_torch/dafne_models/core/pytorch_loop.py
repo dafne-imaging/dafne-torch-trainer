@@ -65,8 +65,8 @@ def pytorch_training_loop(model,
         if key.startswith('compute_') and value:
             metric = key.replace('compute_', '')
             if metric in MONAI_REGISTRY:
-                metric = metric.replace('_', ' ')
                 if isinstance(MONAI_REGISTRY[metric], ConfusionMatrixMetric):
+                    metric = metric.replace('_', ' ')
                     active_metrics[metric] = MONAI_REGISTRY[metric](
                         include_background=inference_metrics['include_background'], 
                         reduction=inference_metrics['reduction'],
