@@ -370,7 +370,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             dataset_config = dataset_config,
             model_config = model_config,
             train_config = train_config,
-            inference_config = inference_config,
+            inference_metrics = inference_config,
             save_path = self.save_path,
         )
 
