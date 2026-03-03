@@ -1,7 +1,6 @@
-import os
-import csv
 import torch
 import random as rd
+from torch.utils.tensorboard import SummaryWriter
 
 from monai.metrics import  (DiceMetric, 
                             HausdorffDistanceMetric, 
@@ -87,7 +86,10 @@ def pytorch_training_loop(model,
         for label in labels_name:
             metrics_to_log[f'dice_{label}'] = 0.0
     if save_path:
-        csv_path = save_path.replace('.dafne', '.csv')
+        log_dir = os.path.join(os.path.dirname(save_path), "logs")
+        tb_writer = SummaryWriter(log_dir=log_dir)
+    else:
+        tb_writer = None
 
     scaler = torch.amp.GradScaler(enabled=mixed_precision)
 
@@ -185,9 +187,18 @@ def pytorch_training_loop(model,
             dice_metric.reset()
 
             for metric_name, metric in active_metrics.items():
-                metric_score = metric.aggregate()
-                if isinstance(metric_score, list):
-                    metric_score = torch.cat(metric_score, dim=0)
+                metric_res = metric.aggregate()
+                
+                if isinstance(metric, ConfusionMatrixMetric):
+                    if isinstance(metric_res, list):
+                        metric_res = torch.cat(metric_res, dim=0)
+                    
+                    # Convert internal name (with underscores) to MONAI name (with spaces)
+                    monai_name = metric_name.replace('_', ' ')
+                    metric_score = compute_confusion_matrix_metric(monai_name, metric_res)
+                else:
+                    metric_score = metric_res
+
                 metric_score_avg = metric_score.mean().item()
                 per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
                 metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
@@ -272,14 +283,19 @@ def pytorch_training_loop(model,
                             per_mask_dice_score
                             )
         
-        history_metrics.append(metrics_to_log)
-        if save_path: 
-            file_exists = os.path.exists(csv_path)
-            with open(csv_path, 'a', newline='') as csvfile:
-                writer = csv.DictWriter(csvfile, fieldnames=metrics_to_log.keys())
-                if not file_exists:
-                    writer.writeheader()
-                writer.writerow(metrics_to_log)
+        if tb_writer:
+            for key, val in metrics_to_log.items():
+                if key == 'epoch' or val is None: 
+                    continue
+                # Organization tags for cleaner TensorBoard UI
+                tag = key.replace('train_', 'Loss/').replace('val_', 'Loss/').replace('dice_', 'Dice/')
+                tb_writer.add_scalar(tag, val, epoch)
+            
+            # Optional: log the preview image to TensorBoard as well
+            if 'img_np' in locals() and 'pred_np' in locals():
+                # Normalized images for display
+                tb_writer.add_image('Preview/Image', img_np, epoch, dataformats='HW')
+                tb_writer.add_image('Preview/Prediction', pred_np, epoch, dataformats='HW')
 
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
@@ -293,6 +309,9 @@ def pytorch_training_loop(model,
             import gc
             gc.collect()
             torch.cuda.empty_cache()
+
+    if tb_writer:
+        tb_writer.close()
 
     return float(best_val_dice_score)
 

@@ -111,7 +111,7 @@ def build_model():
             spatial_dims=params['spatial_dims'],
             in_channels=params['in_channels'],
             out_channels=params['out_channels'],
-            kernel_size=params['kernels'],
+            kernels=params['kernels'],
             strides=params['strides'],
             norm_name=("INSTANCE", {{"affine": True}}),
             deep_supervision=False
