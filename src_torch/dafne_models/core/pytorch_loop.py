@@ -65,10 +65,18 @@ def pytorch_training_loop(model,
         if key.startswith('compute_') and value:
             metric = key.replace('compute_', '')
             if metric in MONAI_REGISTRY:
-                active_metrics[metric] = MONAI_REGISTRY[metric](
-                    include_background=inference_metrics['include_background'], 
-                    reduction=inference_metrics['reduction']
-                )
+                metric = metric.replace('_', ' ')
+                if isinstance(MONAI_REGISTRY[metric], ConfusionMatrixMetric):
+                    active_metrics[metric] = MONAI_REGISTRY[metric](
+                        include_background=inference_metrics['include_background'], 
+                        reduction=inference_metrics['reduction'],
+                        metric_name=metric
+                    )
+                else:
+                    active_metrics[metric] = MONAI_REGISTRY[metric](
+                        include_background=inference_metrics['include_background'], 
+                        reduction=inference_metrics['reduction']
+                    )
                 metrics_to_log[f'avg_{metric}'] = 0.0
                 if labels_name:
                     for label in labels_name:
@@ -91,11 +99,13 @@ def pytorch_training_loop(model,
             break
         
         # classic pytorch training loop defined
-        model.train()
-        epoch_loss = 0.0
-        avg_loss = 0.0
-        avg_val_loss = 0.0
+        # Crea una copia del template completo preparato all'inizio
+        metrics_to_log = metrics_to_log.copy()
+        
         metrics_to_log['epoch'] = epoch + 1
+        metrics_to_log['train_loss'] = 0.0
+        metrics_to_log['val_loss'] = 0.0
+        metrics_to_log['dice_avg'] = 0.0
         
         for batch in train_dataloader:
             if check_stop is not None and check_stop():
@@ -171,6 +181,15 @@ def pytorch_training_loop(model,
             per_mask_dice_score = {name: dice_score[i].item() for i, name in enumerate(labels_name)}
             dice_metric.reset()
 
+            for metric_name, metric in active_metrics.items():
+                metric_score = metric.aggregate()
+                metric_score_avg = metric_score.mean().item()
+                per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
+                metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
+                for label in labels_name:
+                    metrics_to_log[f'{metric_name}_{label}'] = per_mask_metric_score[label]
+                metric.reset()
+
             metrics_to_log['train_loss'] = avg_loss
             metrics_to_log['val_loss'] = avg_val_loss
             metrics_to_log['dice_avg'] = dice_score_avg
@@ -178,24 +197,6 @@ def pytorch_training_loop(model,
             if labels_name:
                 for label in labels_name:
                     metrics_to_log[f'dice_{label}'] = per_mask_dice_score[label]
-
-            for metric_name, metric in active_metrics.items():
-                metric_res = metric.aggregate() # Tensor from metrics
-                
-                # Special case: Confusion Matrix based metrics
-                if isinstance(metric, ConfusionMatrixMetric):
-                    # compute final scores (per class)
-                    metric_score = compute_confusion_matrix_metric(metric_name, metric_res)
-                else: 
-                    # standard monai metrics
-                    metric_score = metric_res
-
-                metric_score_avg = metric_score.mean().item()
-                per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
-                metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
-                for label in labels_name:
-                    metrics_to_log[f'{metric_name}_{label}'] = per_mask_metric_score[label]
-                metric.reset()
 
             if dice_score_avg > best_val_dice_score:
                 best_val_dice_score = dice_score_avg
