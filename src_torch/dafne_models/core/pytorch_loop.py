@@ -186,6 +186,8 @@ def pytorch_training_loop(model,
 
             for metric_name, metric in active_metrics.items():
                 metric_score = metric.aggregate()
+                if isinstance(metric_score, list):
+                    metric_score = torch.cat(metric_score, dim=0)
                 metric_score_avg = metric_score.mean().item()
                 per_mask_metric_score = {name: metric_score[i].item() for i, name in enumerate(labels_name)}
                 metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
