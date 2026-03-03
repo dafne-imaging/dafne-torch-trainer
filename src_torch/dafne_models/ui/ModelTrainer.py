@@ -306,7 +306,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             random_seed=42
         )
 
-        model_config = ModelConfig(
+        self.model_config = ModelConfig(
             model_name='dynunet' if dyn_unet else 'unet',
             spatial_dims=3 if spatial_dims else 2,
             out_channels=2,
@@ -348,13 +348,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         # Add adaptation parameters
         mode = self.adaptation_params.get('mode', 'scratch')
         if mode == 'finetune':
-            model_config.fine_tuning = True
-            model_config.percent_to_freeze = self.adaptation_params.get('freeze_degree', 0.5)
+            self.model_config.fine_tuning = True
+            self.model_config.percent_to_freeze = self.adaptation_params.get('freeze_degree', 0.5)
         elif mode == 'lora':
-            model_config.fine_tuning = True
-            model_config.percent_to_freeze = None
+            self.model_config.fine_tuning = True
+            self.model_config.percent_to_freeze = None
             # Default to all layers for now
-            model_config.lora_config = LoraConfig(
+            self.model_config.lora_config = LoraConfig(
                 r=self.adaptation_params.get('lora_rank', 8),
                 lora_alpha=self.adaptation_params.get('lora_alpha', 16),
                 lora_dropout=0.1,
@@ -362,13 +362,13 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
                 target_modules=['.*']
             )
         else: # scratch
-            model_config.fine_tuning = False
-            model_config.percent_to_freeze = None
-            model_config.lora_config = None
+            self.model_config.fine_tuning = False
+            self.model_config.percent_to_freeze = None
+            self.model_config.lora_config = None
 
         self.worker = TrainingWorker(
             dataset_config = dataset_config,
-            model_config = model_config,
+            model_config = self.model_config,
             train_config = train_config,
             inference_metrics = inference_config,
             save_path = self.save_path,
@@ -452,7 +452,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if mask is not None: 
             masked = np.ma.masked_where(mask == 0, mask)
             vmin = 0
-            vmax = model_config.out_channels
+            vmax = self.model_config.out_channels
             im = self.ax_preview.imshow(masked, cmap='tab20', alpha=0.5, aspect=pixel_aspect, vmin=vmin, vmax=vmax)
             if per_mask_dice:
                 legend_elements = []
