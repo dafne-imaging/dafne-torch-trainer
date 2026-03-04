@@ -98,3 +98,28 @@ class ModelFactory:
             freeze = (i < num_to_freeze)
             for param in module.parameters(recurse=False):
                 param.requires_grad = not freeze
+    
+    @staticmethod
+    def get_trainable_layers(model: nn.Module) -> list:
+        '''
+        Get the trainable layers
+        '''
+        modules_to_train = [m for m in model.modules() if any(p.requires_grad for p in m.parameters(recurse=False))]
+        return modules_to_train
+    
+    @staticmethod
+    def change_lr_for_layer(model: nn.Module, base_lr:float):
+        module_to_train = ModelFactory.get_trainable_layers(model)
+        
+        num_m = len(module_to_train)
+        param_group = []
+        for i, m in enumerate(module_to_train):
+            multiplier = 0.1 + (0.9 * (i / (num_m - 1 if num_m > 1 else 1)))
+            train_params = [p for p in m.parameters(recurse=False) if p.requires_grad]
+            if not train_params:
+                continue
+            param_group.append({
+                'params': train_params,
+                'lr': base_lr * multiplier
+            })
+        return param_group

@@ -157,10 +157,15 @@ class TrainingWorker(QThread):
             self.model = DafneModelWrapper(core_model)
             self.model.to(self.device)
 
-            optimizer = torch.optim.Adam(
-                filter(lambda p: p.requires_grad, self.model.parameters()), 
-                lr=self.train_config.learning_rate
-            )
+            if self.model_config.fine_tuning and \
+                not self.model_config.lora_config:
+                param_groups = ModelFactory.change_lr_for_layer(self.model.model, self.train_config.learning_rate)
+                optimizer = torch.optim.Adam(param_groups)
+            else:
+                optimizer = torch.optim.Adam(
+                    filter(lambda p: p.requires_grad, self.model.parameters()), 
+                    lr=self.train_config.learning_rate
+                )
 
             criterion = DiceCELoss(include_background=False, 
                                     softmax=True,
