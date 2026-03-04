@@ -361,7 +361,7 @@ def save_val_metrics_per_patient(val_metadata:List[Dict[str, Any]], save_path:st
     for key, metric in metrics.items():
         raw_buffer = metric.get_buffer()
         if isinstance(metric, ConfusionMatrixMetric):
-            computed = compute_confusion_matrix_metric(metric.metric_name, raw_buffer)
+            computed = compute_confusion_matrix_metric(key.replace('_', ' '), raw_buffer)
         else:
             computed = raw_buffer
         metrics_data[key] = computed[:, 1:] if metric.include_background else computed
