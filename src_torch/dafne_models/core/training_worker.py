@@ -228,12 +228,17 @@ class TrainingWorker(QThread):
 
             if os.path.exists(best_weights_path):
                 os.remove(best_weights_path)
-            
-            if torch.cuda.is_available():
+
+            import gc
+            del optimizer
+            criterion = None
+            scheduler = None
+            if hasattr(self, 'model') and self.model is not None:
                 self.model.to('cpu')
+                self.model = None
+            gc.collect()
+            if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-                import gc
-                gc.collect()
 
             if not self.is_running:
                 self.sig_stopped.emit()
@@ -243,6 +248,17 @@ class TrainingWorker(QThread):
         except Exception as e:
             traceback.print_exc()
             self.sig_error.emit(str(e))
+        finally:
+            import gc
+            if hasattr(self, 'model') and self.model is not None:
+                try:
+                    self.model.to('cpu')
+                except Exception:
+                    pass
+                self.model = None
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
     def stop(self):
         self.is_running = False            

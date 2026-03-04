@@ -312,16 +312,16 @@ def pytorch_training_loop(model,
 
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
-    # delete tensors and model from gpu memory
+    model.to('cpu')
+    try:
+        val_output = val_mask = val_preds = val_masks = val_image = None
+        inputs = targets = outputs = None
+    except NameError:
+        pass
+    import gc
+    gc.collect()
     if torch.cuda.is_available():
-        model.to('cpu')
-        try:
-            del_from_gpu(model, val_output, val_mask, val_preds, val_masks)
-        except NameError:
-            # handle case where some variables might not be defined if training stopped early
-            import gc
-            gc.collect()
-            torch.cuda.empty_cache()
+        torch.cuda.empty_cache()
 
     if tb_writer_train and tb_writer_val:
         tb_writer_train.close()
