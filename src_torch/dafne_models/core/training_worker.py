@@ -141,9 +141,11 @@ class TrainingWorker(QThread):
                 self.model_config.extra_params['kernels'] = net_params.get('kernels', None)
                 self.model_config.extra_params['strides'] = net_params.get('strides', None)
             
-                data_builder = TransformBuilderFineTuning(self.model_config, self.train_config, loaded_obj)
+                data_builder = TransformBuilderFineTuning(self.model_config, self.train_config)
             else:
                 self.sig_status.emit("Training from scratch mode")
+                self.model_config.median_shape = data_fingerprint.data_shape.tolist()
+                self.model_config.median_spacing = data_fingerprint.data_spacing.tolist()
                 data_builder = TransformBuilderTraining(self.model_config, self.train_config, data_fingerprint)
             train_transforms, val_transforms = data_builder.build_transforms()
             

@@ -252,7 +252,9 @@ class PreprocessAnisotropy(MapTransform):
     
     def check_anisotrophy(self, spacing):
         def check(s):
-            return np.max(spacing) / np.min(spacing) >= 3
+            if s is None:
+                return False
+            return np.max(s) / np.min(s) >= 3
         return check(spacing) or check(self.target_spacing)
     
     def __call__(self, data):
