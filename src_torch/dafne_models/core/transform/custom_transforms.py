@@ -366,7 +366,7 @@ if __name__ == "__main__":
     all_npz_files.sort()
 
     try:
-        from .manage_data import DafneDataset
+        from ..data_manager import DafneDataset
         dataset = DafneDataset(data_files=all_npz_files, spatial_dims=3, train_transform=False)
         loader = DataLoader(dataset, batch_size=1, shuffle=True, num_workers=0, collate_fn=pad_list_data_collate)
         print("Dataset correctly done")

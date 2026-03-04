@@ -1,5 +1,7 @@
+from typing import Dict, List, Any
 import torch
 import os
+import csv
 import random as rd
 from torch.utils.tensorboard import SummaryWriter
 
@@ -55,7 +57,6 @@ def pytorch_training_loop(model,
     best_val_dice_score = -float("inf")
     counter = 0
 
-    history_metrics = []
     active_metrics = {}
     metrics_to_log = {'epoch': 0, 
                         'train_loss': 0.0, 
@@ -88,9 +89,11 @@ def pytorch_training_loop(model,
             metrics_to_log[f'dice_{label}'] = 0.0
     if save_path:
         log_dir = os.path.join(os.path.dirname(save_path), "logs")
-        tb_writer = SummaryWriter(log_dir=log_dir)
+        tb_writer_train = SummaryWriter(log_dir=os.path.join(log_dir, "train"))
+        tb_writer_val   = SummaryWriter(log_dir=os.path.join(log_dir, "val"))
     else:
-        tb_writer = None
+        tb_writer_train = None
+        tb_writer_val   = None
 
     scaler = torch.amp.GradScaler(enabled=mixed_precision)
 
@@ -156,6 +159,7 @@ def pytorch_training_loop(model,
                 pass
         
         per_mask_dice_score = {}
+        val_metadata = []
         with torch.no_grad():
             for batch in valid_dataloader:
                 if check_stop is not None and check_stop():
@@ -176,6 +180,11 @@ def pytorch_training_loop(model,
 
                 for metric in active_metrics.values():
                     metric(y_pred=val_preds, y=val_masks)
+                
+                val_metadata.append({
+                    'patient': os.path.basename(batch['filepath'][0]),
+                    'slice': batch['index'].item() if 'index' in batch else '3D',
+                })
             
             if check_stop is not None and check_stop():
                 break
@@ -185,23 +194,6 @@ def pytorch_training_loop(model,
             dice_score_avg = dice_score.mean().item() # mean of all masks
             avg_val_loss = val_loss / len(valid_dataloader)
             per_mask_dice_score = {name: dice_score[i].item() for i, name in enumerate(labels_name)}
-            dice_metric.reset()
-
-            for metric_name, metric in active_metrics.items():
-                metric_score = metric.aggregate()
-
-                # In case metric.aggregate() returns a list across multiple batches, concatenate them
-                if isinstance(metric_score, list):
-                    metric_score = torch.cat(metric_score, dim=0)
-
-                metric_score_avg = metric_score.mean().item()
-                incl_bg = inference_metrics['include_background']
-                active_scores = metric_score[1:] if incl_bg else metric_score
-                per_mask_metric_score = {name: active_scores[i].item() for i, name in enumerate(labels_name)}
-                metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
-                for label in labels_name:
-                    metrics_to_log[f'{metric_name}_{label}'] = per_mask_metric_score[label]
-                metric.reset()
 
             metrics_to_log['train_loss'] = avg_loss
             metrics_to_log['val_loss'] = avg_val_loss
@@ -213,6 +205,8 @@ def pytorch_training_loop(model,
 
             if dice_score_avg > best_val_dice_score:
                 best_val_dice_score = dice_score_avg
+                if save_path:
+                    save_val_metrics_per_patient(val_metadata, save_path, dice_metric, active_metrics, labels_name)
                 counter = 0
             
                 if save_path:
@@ -233,6 +227,23 @@ def pytorch_training_loop(model,
                 if counter >= PATIENT:
                     on_log(f'Training interrupted because of early stopping. Model saved in {save_path}') 
                     break
+
+            dice_metric.reset()
+
+            for metric_name, metric in active_metrics.items():
+                metric_score = metric.aggregate()
+
+                # In case metric.aggregate() returns a list across multiple batches, concatenate them
+                if isinstance(metric_score, list):
+                    metric_score = torch.cat(metric_score, dim=0)
+
+                active_scores = metric_score[1:] if metric.include_background else metric_score
+                metric_score_avg = active_scores.mean().item()
+                per_mask_metric_score = {name: active_scores[i].item() for i, name in enumerate(labels_name)}
+                metrics_to_log[f'avg_{metric_name}'] = metric_score_avg
+                for label in labels_name:
+                    metrics_to_log[f'{metric_name}_{label}'] = per_mask_metric_score[label]
+                metric.reset()
             
             if torch.cuda.is_available():
                 del_from_gpu(val_output, val_mask, val_preds, val_masks)
@@ -280,22 +291,24 @@ def pytorch_training_loop(model,
                             per_mask_dice_score
                             )
         
-        if tb_writer:
+        if tb_writer_train and tb_writer_val:
             for key, val in metrics_to_log.items():
-                if key == 'epoch' or val is None: 
+                if key == 'epoch' or val is None:
                     continue
-                # Organization tags for cleaner TensorBoard UI
                 if key.startswith('train_'):
-                    tag = 'Loss/train_' + key[len('train_'):]
+                    tag = 'Loss/' + key[len('train_'):]
+                    tb_writer_train.add_scalar(tag, val, epoch)
                 elif key.startswith('val_'):
-                    tag = 'Loss/val_' + key[len('val_'):]
+                    tag = 'Loss/' + key[len('val_'):]
+                    tb_writer_val.add_scalar(tag, val, epoch)
                 elif key.startswith('dice_'):
                     tag = 'Dice/' + key[len('dice_'):]
+                    tb_writer_val.add_scalar(tag, val, epoch)
                 elif key.startswith('avg_'):
-                    tag = 'Metrics/' + key
+                    tag = 'Metrics/' + key[len('avg_'):]
+                    tb_writer_val.add_scalar(tag, val, epoch)
                 else:
-                    tag = 'Metrics/' + key
-                tb_writer.add_scalar(tag, val, epoch)
+                    tb_writer_val.add_scalar('Metrics/' + key, val, epoch)
 
     if on_log: on_log(f'Trainging engine finished. Best Dice {best_val_dice_score:.4f}')
 
@@ -310,8 +323,9 @@ def pytorch_training_loop(model,
             gc.collect()
             torch.cuda.empty_cache()
 
-    if tb_writer:
-        tb_writer.close()
+    if tb_writer_train and tb_writer_val:
+        tb_writer_train.close()
+        tb_writer_val.close()
 
     return float(best_val_dice_score)
 
@@ -330,6 +344,48 @@ def valid_on_batch_3d(image_batch, model, val_roi_size):
         overlap=0.25,
         predictor=model
     )
+
+
+def save_val_metrics_per_patient(val_metadata:List[Dict[str, Any]], save_path:str, dice_metric, metrics, labels_name):
+
+    csv_path = os.path.join(os.path.dirname(save_path), 'val_metrics_per_patient.csv')
+
+    # dice: include_background=False → buffer shape [N, n_foreground_classes], aligned with labels_name
+    dice_buffer = dice_metric.get_buffer()
+
+    # For ConfusionMatrixMetric: get_buffer() returns raw counts [N, C, 4] (TP/FP/TN/FN),
+    # compute_confusion_matrix_metric converts them to actual values [N, C].
+    # For other metrics (Hausdorff, SurfaceDistance): buffer already contains actual values [N, C].
+    # If include_background=True, strip column 0 (background) → [N, n_foreground_classes].
+    metrics_data = {}
+    for key, metric in metrics.items():
+        raw_buffer = metric.get_buffer()
+        if isinstance(metric, ConfusionMatrixMetric):
+            computed = compute_confusion_matrix_metric(metric.metric_name, raw_buffer)
+        else:
+            computed = raw_buffer
+        metrics_data[key] = computed[:, 1:] if metric.include_background else computed
+
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.writer(f)
+
+        header = ['Patient', 'Slice']
+        for label in labels_name:
+            header.append(f'Dice_{label}')
+        for metric_name in metrics.keys():
+            for label in labels_name:
+                header.append(f'{metric_name}_{label}')
+        writer.writerow(header)
+
+        for i, meta in enumerate(val_metadata):
+            row = [meta['patient'], meta['slice']]
+            for j in range(len(labels_name)):
+                row.append(f'{dice_buffer[i][j].item():.4f}')
+            for metric_name in metrics.keys():
+                metric_row = metrics_data[metric_name][i]
+                for j in range(len(labels_name)):
+                    row.append(f'{metric_row[j].item():.4f}')
+            writer.writerow(row)
 
 def del_from_gpu(*model_params):
     import gc
