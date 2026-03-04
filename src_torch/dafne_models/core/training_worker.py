@@ -159,6 +159,15 @@ class TrainingWorker(QThread):
             self.model = DafneModelWrapper(core_model)
             self.model.to(self.device)
 
+            # Free the DynamicTorchModel object (may hold raw file bytes) now
+            # that the model is on device and no longer needed.
+            if loaded_obj is not None:
+                import gc
+                loaded_obj = None
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+
             if self.model_config.fine_tuning and \
                 not self.model_config.lora_config:
                 param_groups = ModelFactory.change_lr_for_layer(self.model.model, self.train_config.learning_rate)

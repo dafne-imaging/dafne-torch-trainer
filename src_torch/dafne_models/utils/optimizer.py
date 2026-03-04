@@ -40,11 +40,17 @@ def get_optimal_hyperparameters(
     gpu_props = torch.cuda.get_device_properties(device)
     total_vram = gpu_props.total_memory  # bytes
 
-    BYTES_PER_VOXEL = 6_000 if is_finetune else 10_000
+    # Fine-tuning saves memory on gradient/optimizer buffers for frozen params,
+    # but forward-pass activations remain the same size (norm layers after frozen
+    # convs keep requires_grad=True, so the full computation graph is retained).
+    # Real savings are ~15-20%, not 40%.
+    BYTES_PER_VOXEL = 8_500 if is_finetune else 10_000
     BYTES_PER_VOXEL = BYTES_PER_VOXEL * 0.6 if mixed_precision else BYTES_PER_VOXEL
 
     # Static overhead: model weights + optimiser state + CUDA/cuDNN buffers.
-    STATIC_OVERHEAD = int(1.0e9) if is_finetune else int(1.5e9)  # 1 GB / 1.5 GB
+    # Fine-tuning also keeps the pretrained model weights in VRAM, so overhead
+    # is not significantly lower than training from scratch.
+    STATIC_OVERHEAD = int(1.3e9) if is_finetune else int(1.5e9)  # 1.3 GB / 1.5 GB
     STATIC_OVERHEAD = STATIC_OVERHEAD * 0.8 if mixed_precision else STATIC_OVERHEAD
 
     usable_vram = max(total_vram * safety_factor - STATIC_OVERHEAD, 0)
