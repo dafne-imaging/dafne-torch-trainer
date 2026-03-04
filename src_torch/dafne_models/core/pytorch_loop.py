@@ -193,7 +193,7 @@ def pytorch_training_loop(model,
             dice_score = dice_metric.aggregate() # mean of all batches for each mask
             dice_score_avg = dice_score.mean().item() # mean of all masks
             avg_val_loss = val_loss / len(valid_dataloader)
-            per_mask_dice_score = {name: dice_score[i].item() for i, name in enumerate(labels_name)}
+            per_mask_dice_score = {name: dice_score[i].item() for i, name in enumerate(labels_name) if i < len(dice_score)}
 
             metrics_to_log['train_loss'] = avg_loss
             metrics_to_log['val_loss'] = avg_val_loss

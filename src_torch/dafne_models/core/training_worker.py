@@ -154,13 +154,12 @@ class TrainingWorker(QThread):
 
             out_channels = data_fingerprint.count_label_mask(data_module.train_files) #compute n_classes on train files
             self.model_config.out_channels = out_channels
+            self.model_config.labels_name = data_fingerprint.get_labels_name()
 
             core_model = ModelFactory.create_model(self.model_config, loaded_obj)
             self.model = DafneModelWrapper(core_model)
             self.model.to(self.device)
 
-            # Free the DynamicTorchModel object (may hold raw file bytes) now
-            # that the model is on device and no longer needed.
             if loaded_obj is not None:
                 import gc
                 loaded_obj = None
