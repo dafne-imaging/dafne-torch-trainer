@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 import inspect
 from .dafne_networks import DafneUnetModel, DafneDynUnetModel
 from ..config.config_params import ModelConfig
@@ -106,6 +107,37 @@ class ModelFactory:
         '''
         modules_to_train = [m for m in model.modules() if any(p.requires_grad for p in m.parameters(recurse=False))]
         return modules_to_train
+    
+    @staticmethod
+    def gradual_unfreeze(model:nn.Module, degree_to_unfreeze:float, optimizer:torch.optim.Optimizer):
+        trainable_blocks = [
+            module for module in model.modules()
+            if len(list(module.parameters(recurse=False))) > 0
+        ]
+        reverse_trainable_module = trainable_blocks[::-1]
+
+        num_m = len(reverse_trainable_module)
+        num_to_unfreeze = int(num_m * degree_to_unfreeze)
+
+        for i, module in enumerate(reverse_trainable_module):
+            is_norm = isinstance(module, (
+                nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d,
+                nn.InstanceNorm1d, nn.InstanceNorm2d, nn.InstanceNorm3d,
+                nn.LayerNorm, nn.GroupNorm
+            ))
+
+            if is_norm:
+                for param in module.parameters():
+                    param.requires_grad = True
+                continue
+
+            trainable = (i < num_to_unfreeze)
+            for param in module.parameters(recurse=False):
+                param.requires_grad = trainable
+        
+        current_trainable_params = [p for p in model.parameters() if p.requires_grad]
+        optimizer.param_groups[0]['params'] = current_trainable_params
+        return optimizer
     
     @staticmethod
     def change_lr_for_layer(model: nn.Module, base_lr:float):

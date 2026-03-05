@@ -42,6 +42,7 @@ class ModelConfig:
     # fine-tuning parameters
     fine_tuning: bool = False
     percent_to_freeze: float = 0.0
+    gradual_unfreezing: bool = False
 
     # lora parameters
     lora_config: Optional[LoraConfig] = None

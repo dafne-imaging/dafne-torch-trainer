@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, 
     QComboBox, QDoubleSpinBox, QSpinBox, QLabel, 
-    QDialogButtonBox, QWidget, QStackedWidget
+    QDialogButtonBox, QWidget, QStackedWidget, QCheckBox
 )
 from PyQt5.QtCore import Qt
 
@@ -16,6 +16,7 @@ class FineTuningDialog(QDialog):
             current_settings = {
                 'mode': 'scratch',
                 'freeze_degree': 0.5,
+                'gradual_unfreeze': False,
                 'lora_rank': 8,
                 'lora_alpha': 16
             }
@@ -65,6 +66,12 @@ class FineTuningDialog(QDialog):
         self.freeze_spin.setToolTip("0.0 = all filters trainable, 1.0 = all layers frozen")
         
         finetune_layout.addRow("Freeze Layers degree (0-1):", self.freeze_spin)
+
+        self.gradual_unfreeze_check = QCheckBox()
+        self.gradual_unfreeze_check.setChecked(current_settings.get('gradual_unfreeze', False))
+        self.gradual_unfreeze_check.setToolTip("Unfreeze layers progressively during training")
+        finetune_layout.addRow("Gradual Unfreezing:", self.gradual_unfreeze_check)
+
         self.stacked_widget.addWidget(self.page_finetune)
 
         # --- Page 2: LoRA ---
@@ -112,6 +119,7 @@ class FineTuningDialog(QDialog):
         return {
             'mode': self.mode_combo.currentData(),
             'freeze_degree': self.freeze_spin.value(),
+            'gradual_unfreeze': self.gradual_unfreeze_check.isChecked(),
             'lora_rank': self.rank_spin.value(),
             'lora_alpha': self.alpha_spin.value()
         }

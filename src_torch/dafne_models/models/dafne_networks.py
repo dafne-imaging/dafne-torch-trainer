@@ -48,14 +48,14 @@ class DafneUnetModel(nn.Module):
         return self.unet_model(x)
     
     def update_output_channels(self, n_classes:int):
-        conv_fn = getattr(nn, f'Conv{self.spatial_dims}d')
-        # In MONAI Unet, l'ultimo blocco è un Sequential che contiene la conv
-        old_conv = self.unet_model.model[-1].conv
+        conv_transp_fn = getattr(nn, f'ConvTranspose{self.spatial_dims}d')
+        old_conv = self.unet_model.model[-1][0].conv
         in_channels = old_conv.in_channels
         self.unet_model.out_channels = n_classes
-        self.unet_model.model[-1].conv = conv_fn(in_channels, 
-                                                 n_classes, 
-                                                 kernel_size=1)
+        self.unet_model.model[-1][0].conv = conv_transp_fn(in_channels, 
+                                                     n_classes, 
+                                                     kernel_size=old_conv.kernel_size,
+                                                     padding=old_conv.padding)
         self.out_channels = n_classes
     
 

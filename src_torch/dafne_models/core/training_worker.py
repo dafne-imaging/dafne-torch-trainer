@@ -155,8 +155,12 @@ class TrainingWorker(QThread):
             out_channels = data_fingerprint.count_label_mask(data_module.train_files) #compute n_classes on train files
             self.model_config.out_channels = out_channels
             self.model_config.labels_name = data_fingerprint.get_labels_name()
+            
+            use_gradual_unfreezing = self.model_config.gradual_unfreezing and \
+                self.model_config.fine_tuning 
 
             core_model = ModelFactory.create_model(self.model_config, loaded_obj)
+            unfreeze_fn = ModelFactory.gradual_unfreeze if use_gradual_unfreezing else None
             self.model = DafneModelWrapper(core_model)
             self.model.to(self.device)
 
@@ -173,12 +177,13 @@ class TrainingWorker(QThread):
                 # Full fine-tuning (no freeze, no LoRA): discriminative LR,
                 # lower for earlier layers and higher for later layers.
                 param_groups = ModelFactory.change_lr_for_layer(self.model.model, self.train_config.learning_rate)
-                optimizer = torch.optim.Adam(param_groups)
+                optimizer = torch.optim.AdamW(param_groups, weight_decay=1e-4)
             else:
                 # Freeze mode or LoRA: uniform LR on trainable params only.
-                optimizer = torch.optim.Adam(
+                optimizer = torch.optim.AdamW(
                     filter(lambda p: p.requires_grad, self.model.parameters()),
-                    lr=self.train_config.learning_rate
+                    lr=self.train_config.learning_rate, 
+                    weight_decay=1e-4
                 )
 
             criterion = DiceCELoss(include_background=False, 
@@ -212,7 +217,10 @@ class TrainingWorker(QThread):
                 val_roi_size=self.model_config.patch_size,
                 model_name=self.model_config.model_name,
                 labels_name=self.model_config.labels_name,
-                inference_metrics=asdict(self.inference_metrics)
+                inference_metrics=asdict(self.inference_metrics),
+                unfreeze_fn=unfreeze_fn,
+                initial_freeze_degree=self.model_config.percent_to_freeze \
+                    if self.model_config.percent_to_freeze is not None else 0.0
             )
 
             save_dir = os.path.dirname(self.save_path)

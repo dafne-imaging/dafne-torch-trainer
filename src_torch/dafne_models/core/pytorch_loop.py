@@ -48,7 +48,9 @@ def pytorch_training_loop(model,
                           on_log=None,
                           val_roi_size=None,
                           labels_name:list[str]=None,
-                          inference_metrics=None
+                          inference_metrics=None,
+                          unfreeze_fn=None,
+                          initial_freeze_degree:float=0.0
                           ):
     
     if on_log: on_log(f"Engine Starting on device {device}. {epochs} epochs")
@@ -114,6 +116,14 @@ def pytorch_training_loop(model,
         metrics_to_log['train_loss'] = 0.0
         metrics_to_log['val_loss'] = 0.0
         metrics_to_log['dice_avg'] = 0.0
+
+        # gradual unfreezing logic
+        if unfreeze_fn is not None and epoch > 0 and epoch % 5 == 0:
+            start_trainable_percent = 1.0 - initial_freeze_degree
+            unfreeze_progress = epoch / max(1, int(epochs * 0.75))
+            current_trainable_degree = min(1.0, start_trainable_percent + unfreeze_progress)
+            optimizer = unfreeze_fn(model.model, current_trainable_degree, optimizer)
+            if on_log: on_log(f"Gradual Unfreeze: now {current_trainable_degree*100:.1f}% of the network is trainable")
         
         model.train()
         for batch in train_dataloader:
@@ -344,7 +354,6 @@ def valid_on_batch_3d(image_batch, model, val_roi_size):
         overlap=0.25,
         predictor=model
     )
-
 
 def save_val_metrics_per_patient(val_metadata:List[Dict[str, Any]], save_path:str, dice_metric, metrics, labels_name):
 

@@ -350,6 +350,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         if mode == 'finetune':
             self.model_config.fine_tuning = True
             self.model_config.percent_to_freeze = self.adaptation_params.get('freeze_degree', 0.5)
+            self.model_config.gradual_unfreezing = self.adaptation_params.get('gradual_unfreeze', False)
         elif mode == 'lora':
             self.model_config.fine_tuning = True
             self.model_config.percent_to_freeze = None
