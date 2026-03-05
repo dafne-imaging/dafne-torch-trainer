@@ -131,7 +131,7 @@ class DatasetFingerprint():
             return np.ones(n_classes, dtype=np.float32) / n_classes
 
         freq = voxel_counts / total
-        weights = 1.0 / (freq + 1e-6)
+        weights = 1.0 / np.sqrt(freq + 1e-6)
         weights = weights / weights.sum()
         return weights.astype(np.float32)
 
