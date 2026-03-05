@@ -205,14 +205,11 @@ class TrainingWorker(QThread):
                     weight_decay=1e-4
                 )
 
-            class_weights = data_fingerprint.compute_class_weights(out_channels)
-            class_weights_tensor = torch.tensor(class_weights).to(self.device)
             criterion = DiceCELoss(include_background=False,
                                     softmax=True,
                                     to_onehot_y=True,
                                     squared_pred=True,
-                                    smooth_dr=1e-5,
-                                    weight=class_weights_tensor)
+                                    smooth_dr=1e-5)
                 
             scheduler = None
             if self.train_config.scheduler:
