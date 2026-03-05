@@ -102,10 +102,29 @@ class TrainingWorker(QThread):
         '''
         self.sig_status.emit(message)
     
+    @staticmethod
+    def set_reproducibility(seed: int):
+        '''
+        Set all seeds for reproducibility
+        '''
+        import torch.backends.cudnn as cudnn
+        rd.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        cudnn.deterministic = True
+        cudnn.benchmark = False
+        # Optional: ensure that even dataloader workers are seeded (if used)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+
     def run(self):
         '''
         Run training loop
         '''
+        # Set reproducibility at the very beginning of the thread execution
+        self.set_reproducibility(self.dataset_config.random_seed)
+        
         try:
             loaded_obj = None
             
