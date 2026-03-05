@@ -19,12 +19,14 @@ class ModelFactory:
     def create_model(config: ModelConfig, 
                     dynamic_torch_model_obj: DynamicTorchModel = None) -> nn.Module:
 
+        model_out_channels = None
+
         if config.fine_tuning:
             if dynamic_torch_model_obj is None:
                 raise ValueError("DynamicTorchModel object is required for fine-tuning mode.")
-            
+
             model = dynamic_torch_model_obj.model
-            
+
             try:
                 model_out_channels = dynamic_torch_model_obj.metadata['net_metadata'].get('out_channels')
             except (AttributeError, KeyError):
@@ -62,6 +64,17 @@ class ModelFactory:
             
             model = LoRAModel(model, lora_map)
             model.enable_adapter()
+
+            # If the output layer was replaced (n_classes changed), its base weights are
+            # randomly initialized. Unfreeze them so they train fully instead of being
+            # constrained to rank-r LoRA updates, which is insufficient for a random layer.
+            if model_out_channels is not None and config.out_channels != model_out_channels:
+                for lora_module_name in model.lora_module_names:
+                    lora_module = model.base_model.get_submodule(lora_module_name)
+                    if hasattr(lora_module, 'base_module'):
+                        if getattr(lora_module.base_module, 'out_channels', None) == config.out_channels:
+                            for param in lora_module.base_module.parameters():
+                                param.requires_grad = True
 
         elif config.percent_to_freeze is not None:
             ModelFactory.freeze_layers(model, config.percent_to_freeze)

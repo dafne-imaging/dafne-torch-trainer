@@ -90,7 +90,8 @@ def pytorch_training_loop(model,
         for label in labels_name:
             metrics_to_log[f'dice_{label}'] = 0.0
     if save_path:
-        log_dir = os.path.join(os.path.dirname(save_path), "logs")
+        model_filename = os.path.basename(save_path).split('.')[0]
+        log_dir = os.path.join(os.path.dirname(save_path), "logs", model_filename)
         tb_writer_train = SummaryWriter(log_dir=os.path.join(log_dir, "train"))
         tb_writer_val   = SummaryWriter(log_dir=os.path.join(log_dir, "val"))
     else:
@@ -222,7 +223,8 @@ def pytorch_training_loop(model,
                 if save_path:
                     try: 
                         save_dir = os.path.dirname(save_path)
-                        filename = f"{model_name}_best_model.pth" if model_name else "_best_model.pth"
+                        model_filename = os.path.basename(save_path).split('.')[0]
+                        filename = f"{model_filename}_best_model.pth"
                         best_model_path = os.path.join(save_dir, filename)
                         torch.save(model.state_dict(), best_model_path)
                         
@@ -357,7 +359,8 @@ def valid_on_batch_3d(image_batch, model, val_roi_size):
 
 def save_val_metrics_per_patient(val_metadata:List[Dict[str, Any]], save_path:str, dice_metric, metrics, labels_name):
 
-    csv_path = os.path.join(os.path.dirname(save_path), 'val_metrics_per_patient.csv')
+    model_filename = os.path.basename(save_path).split('.')[0]
+    csv_path = os.path.join(os.path.dirname(save_path), f'val_metrics_{model_filename}.csv')
 
     # dice: include_background=False → buffer shape [N, n_foreground_classes], aligned with labels_name
     dice_buffer = dice_metric.get_buffer()

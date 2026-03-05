@@ -106,6 +106,35 @@ class DatasetFingerprint():
 
         return sorted(list(labels_name))
 
+    def compute_class_weights(self, n_classes: int) -> np.ndarray:
+        '''
+        Compute inverse-frequency class weights from the training masks.
+        Returns a normalized weight array of shape [n_classes] (class 0 = background).
+        '''
+        voxel_counts = np.zeros(n_classes, dtype=np.float64)
+
+        for filepath in self.data_list:
+            try:
+                with np.load(filepath, mmap_mode='r') as npz_data:
+                    mask_keys = sorted([k for k in npz_data.keys() if k.startswith('mask')])
+                    if not mask_keys:
+                        continue
+                    total_voxels = npz_data[mask_keys[0]].size
+                    fg_counts = np.array([npz_data[k].sum() for k in mask_keys[:n_classes - 1]], dtype=np.float64)
+                    voxel_counts[0] += total_voxels - fg_counts.sum()
+                    voxel_counts[1:1 + len(fg_counts)] += fg_counts
+            except Exception as e:
+                print(f"Warning: skipping {filepath} for class weights: {e}")
+
+        total = voxel_counts.sum()
+        if total == 0:
+            return np.ones(n_classes, dtype=np.float32) / n_classes
+
+        freq = voxel_counts / total
+        weights = 1.0 / (freq + 1e-6)
+        weights = weights / weights.sum()
+        return weights.astype(np.float32)
+
     @staticmethod
     def count_label_mask(data_list: list[str]) -> int:
         max_masks_found = 0
