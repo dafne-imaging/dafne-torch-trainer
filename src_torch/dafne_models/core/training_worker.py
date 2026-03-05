@@ -168,12 +168,16 @@ class TrainingWorker(QThread):
                     torch.cuda.empty_cache()
 
             if self.model_config.fine_tuning and \
-                not self.model_config.lora_config:
+                not self.model_config.lora_config and \
+                not (self.model_config.percent_to_freeze and self.model_config.percent_to_freeze > 0):
+                # Full fine-tuning (no freeze, no LoRA): discriminative LR,
+                # lower for earlier layers and higher for later layers.
                 param_groups = ModelFactory.change_lr_for_layer(self.model.model, self.train_config.learning_rate)
                 optimizer = torch.optim.Adam(param_groups)
             else:
+                # Freeze mode or LoRA: uniform LR on trainable params only.
                 optimizer = torch.optim.Adam(
-                    filter(lambda p: p.requires_grad, self.model.parameters()), 
+                    filter(lambda p: p.requires_grad, self.model.parameters()),
                     lr=self.train_config.learning_rate
                 )
 

@@ -62,7 +62,7 @@ class ModelFactory:
             model = LoRAModel(model, lora_map)
             model.enable_adapter()
 
-        elif config.percent_to_freeze is not None and config.percent_to_freeze > 0:
+        elif config.percent_to_freeze is not None:
             ModelFactory.freeze_layers(model, config.percent_to_freeze)
         
         return model

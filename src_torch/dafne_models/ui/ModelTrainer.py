@@ -153,7 +153,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self.lr_spin.setValue(1e-4)
         elif mode == 'finetune':
             self.finetuning_settings_btn.setText("Fine-tuning (Classic)")
-            self.lr_spin.setValue(1e-5)
+            self.lr_spin.setValue(1e-4)
         else:
             self.finetuning_settings_btn.setText("Fine-tuning Settings")
             self.lr_spin.setValue(1e-3)
