@@ -78,8 +78,8 @@ class ModelTrainerSplit(QWidget):
         super().__init__(parent)
 
         monitor_dim = QtWidgets.QDesktopWidget().availableGeometry()
-        width = monitor_dim.width() * 0.60
-        height = monitor_dim.height() * 0.68
+        width = monitor_dim.width() * 0.70
+        height = monitor_dim.height() * 0.78
         self.resize(int(width), int(height))
         self.setMinimumSize(780, 480)
         x = (monitor_dim.width() - width) // 2
@@ -464,21 +464,25 @@ class ModelTrainerSplit(QWidget):
         preview_row_layout.setSpacing(8)
 
         # Live Preview Group
-        preview_group = QGroupBox("Live Preview")
-        preview_group.setStyleSheet(group_style)
-        preview_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        pg_layout = QVBoxLayout(preview_group)
-        pg_layout.setContentsMargins(0, 10, 0, 0) # Minimal padding
+        self.preview_group = QGroupBox("Live Preview")
+        self.preview_group.setStyleSheet(group_style)
+        self.preview_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
+        pg_layout = QVBoxLayout(self.preview_group)
+        pg_layout.setContentsMargins(0, 12, 0, 0)
 
-        # Use a non-constrained layout for the preview to have full control over margins
         self.fig_prev = plt.figure(facecolor=_FIG_BG)
         self.canvas_prev = FigureCanvas(self.fig_prev)
         self.canvas_prev.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas_prev.setMinimumSize(10, 10)
         pg_layout.addWidget(self.canvas_prev)
-        preview_row_layout.addWidget(preview_group, stretch=1) # Reduced stretch to be more adherent
 
-        self.ax_preview = self.fig_prev.add_axes([0, 0, 1, 1]) # Occupy 100% of the figure
+        # Add initial stretch to center the content
+        preview_row_layout.addStretch(1)
+
+        # We add the group without stretch, and we'll manage its width in resizeEvent
+        preview_row_layout.addWidget(self.preview_group)
+
+        self.ax_preview = self.fig_prev.add_axes([0, 0, 1, 1])
         self.ax_preview.set_facecolor('#111111')
         self.ax_preview.axis('off')
 
@@ -505,6 +509,10 @@ class ModelTrainerSplit(QWidget):
         lg_box.addWidget(scroll)
 
         preview_row_layout.addWidget(legend_group)
+
+        # Add stretch at the end to push both boxes to the left, keeping them together
+        preview_row_layout.addStretch(1)
+
         box_layout.addLayout(preview_row_layout, stretch=10)
 
     def _style_loss_ax(self):
@@ -581,8 +589,35 @@ class ModelTrainerSplit(QWidget):
 
         self.legend_layout.addStretch()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        # Ensure the preview is squared after the first layout pass
+        QtCore.QTimer.singleShot(50, self._force_square_preview)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._force_square_preview()
+
+    def _force_square_preview(self):
+        """Force the Live Preview box to be square based on its current height,
+        but cap it to available width to prevent overlapping the legend."""
+        if hasattr(self, 'preview_group'):
+            self.preview_group.blockSignals(True)
+            h = self.preview_group.height()
+            
+            # Parent/Container check to avoid overlap
+            # Total width of monitor - (legend width + margins + spacing)
+            container_w = self.fit_output_box.width()
+            legend_w = 200
+            spacing_margins = 40
+            max_w = max(100, container_w - legend_w - spacing_margins)
+            
+            target_w = min(h, max_w)
+            
+            if target_w > 20:
+                self.preview_group.setFixedWidth(int(target_w))
+            self.preview_group.blockSignals(False)
+
         if hasattr(self, 'canvas_loss'):
             self.canvas_loss.draw_idle()
         if hasattr(self, 'canvas_prev'):
