@@ -16,7 +16,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QPalette, QColor, QIcon, QPixmap
 import matplotlib.pyplot as plt
-from matplotlib.patches import Patch
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 import numpy as np
@@ -79,10 +78,10 @@ class ModelTrainerSplit(QWidget):
         super().__init__(parent)
 
         monitor_dim = QtWidgets.QDesktopWidget().availableGeometry()
-        width = monitor_dim.width() * 0.85
-        height = monitor_dim.height() * 0.80
+        width = monitor_dim.width() * 0.60
+        height = monitor_dim.height() * 0.68
         self.resize(int(width), int(height))
-        self.setMinimumSize(900, 560)
+        self.setMinimumSize(780, 480)
         x = (monitor_dim.width() - width) // 2
         y = (monitor_dim.height() - height) // 2
         self.move(int(x), int(y))
@@ -431,30 +430,63 @@ class ModelTrainerSplit(QWidget):
     def _init_matplotlib_canvas(self):
         box_layout = QVBoxLayout(self.fit_output_box)
         box_layout.setContentsMargins(4, 8, 4, 4)
+        box_layout.setSpacing(4)
 
+        # ── Matplotlib canvas: row 0 = loss, row 1 = preview ────────────────
         self.fig = plt.figure(constrained_layout=True, facecolor=_FIG_BG)
-        # Row 0: loss plot (full width); Row 1: preview (left 2/3) + legend (right 1/3)
-        gs = self.fig.add_gridspec(2, 2, width_ratios=[2, 1])
+        gs = self.fig.add_gridspec(2, 1, height_ratios=[1.4, 1])
 
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas.setMinimumSize(10, 10)
-        box_layout.addWidget(self.canvas)
+        box_layout.addWidget(self.canvas, stretch=1)
 
-        self.ax_loss = self.fig.add_subplot(gs[0, :])
+        self.ax_loss = self.fig.add_subplot(gs[0])
         self._style_loss_ax()
 
-        self.ax_preview = self.fig.add_subplot(gs[1, 0])
+        self.ax_preview = self.fig.add_subplot(gs[1])
         self.ax_preview.set_facecolor('#111111')
         self.ax_preview.set_title("Live Preview", fontsize=9, fontweight='bold', pad=4,
                                   color=_TICK_COLOR)
         self.ax_preview.axis('off')
 
-        self.ax_legend = self.fig.add_subplot(gs[1, 1])
-        self.ax_legend.set_facecolor(_AX_BG)
-        self.ax_legend.set_title("Segmentation Legend", fontsize=9, fontweight='bold', pad=4,
-                                  color=_TICK_COLOR)
-        self.ax_legend.axis('off')
+        # ── Qt legend panel (scrollable, replaces ax_legend) ────────────────
+        legend_group = QGroupBox("Segmentation Legend")
+        legend_group.setMaximumHeight(140)
+        legend_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        legend_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 9pt; font-weight: bold;
+                border: 1px solid #d0d0d0;
+                border-radius: 5px;
+                margin-top: 10px;
+                background-color: #fafafa;
+                color: #555;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 3px;
+            }
+        """)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+        self.legend_container = QWidget()
+        self.legend_layout = QVBoxLayout(self.legend_container)
+        self.legend_layout.setContentsMargins(2, 4, 2, 4)
+        self.legend_layout.setSpacing(3)
+        self.legend_layout.addStretch()
+        scroll.setWidget(self.legend_container)
+
+        lg_box = QVBoxLayout(legend_group)
+        lg_box.setContentsMargins(4, 8, 4, 4)
+        lg_box.addWidget(scroll)
+
+        box_layout.addWidget(legend_group)
 
     def _style_loss_ax(self):
         """Apply consistent visual style to ax_loss (called after init and after clear)."""
@@ -469,14 +501,72 @@ class ModelTrainerSplit(QWidget):
         self.ax_loss.yaxis.label.set_color(_TICK_COLOR)
         self.ax_loss.xaxis.label.set_color(_TICK_COLOR)
 
+    def _reset_monitor(self):
+        """Restore the Training Monitor to its initial empty state."""
+        self.loss_history = []
+        self.val_loss_history = []
+        self.ax_loss.clear()
+        self.ax_preview.clear()
+        self._style_loss_ax()
+        self.ax_preview.set_facecolor('#111111')
+        self.ax_preview.set_title("Live Preview", fontsize=9, fontweight='bold',
+                                  pad=4, color=_TICK_COLOR)
+        self.ax_preview.axis('off')
+        self._clear_legend_widget()
+        self.canvas.draw()
+
+    def _clear_legend_widget(self):
+        while self.legend_layout.count():
+            item = self.legend_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _update_legend_widget(self, per_mask_dice, out_channels):
+        self._clear_legend_widget()
+        if not per_mask_dice:
+            return
+
+        cmap = plt.get_cmap('tab20')
+        vmax = max(out_channels, 1)
+
+        for i, (name, score) in enumerate(per_mask_dice.items()):
+            color = cmap((i + 1) / vmax)
+            hex_color = '#{:02x}{:02x}{:02x}'.format(
+                int(color[0] * 255), int(color[1] * 255), int(color[2] * 255))
+
+            row_w = QWidget()
+            row_w.setStyleSheet("background-color: #f0f0f0; border-radius: 4px;")
+            rl = QHBoxLayout(row_w)
+            rl.setContentsMargins(6, 2, 6, 2)
+            rl.setSpacing(8)
+
+            patch = QLabel()
+            patch.setFixedSize(13, 13)
+            patch.setStyleSheet(
+                f"background-color: {hex_color}; border: 1px solid rgba(0,0,0,0.15); border-radius: 3px;")
+
+            name_lbl = QLabel(f"<b>{name}</b>")
+            name_lbl.setTextFormat(QtCore.Qt.RichText)
+            name_lbl.setStyleSheet("font-size: 9pt; color: #222;")
+
+            score_lbl = QLabel(f"{score:.3f}")
+            score_lbl.setStyleSheet("font-size: 9pt; color: #555; font-weight: bold;")
+            score_lbl.setFixedWidth(50)
+            score_lbl.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+
+            rl.addWidget(patch)
+            rl.addWidget(name_lbl)
+            rl.addStretch()
+            rl.addWidget(score_lbl)
+
+            self.legend_layout.addWidget(row_w)
+
+        self.legend_layout.addStretch()
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if hasattr(self, 'canvas'):
             self.canvas.draw_idle()
-
-    # ─────────────────────────────────────────────
-    # BUSINESS LOGIC (identica a ModelTrainer)
-    # ─────────────────────────────────────────────
 
     def open_augm_settings(self):
         dialog = AugmentationDialog(self, self.augm_params)
@@ -595,21 +685,7 @@ class ModelTrainerSplit(QWidget):
 
         self._status_btn(True)
 
-        self.loss_history = []
-        self.val_loss_history = []
-        self.ax_loss.clear()
-        self.ax_preview.clear()
-        self.ax_legend.clear()
-        self._style_loss_ax()
-        self.ax_preview.set_facecolor('#111111')
-        self.ax_preview.set_title("Live Preview", fontsize=9, fontweight='bold',
-                                   pad=4, color=_TICK_COLOR)
-        self.ax_preview.axis('off')
-        self.ax_legend.set_facecolor(_AX_BG)
-        self.ax_legend.set_title("Segmentation Legend", fontsize=9, fontweight='bold',
-                                  pad=4, color=_TICK_COLOR)
-        self.ax_legend.axis('off')
-        self.canvas.draw()
+        self._reset_monitor()
 
         self.progressBar.setValue(0)
         self.progress_Label.setText("Initialization...")
@@ -720,6 +796,8 @@ class ModelTrainerSplit(QWidget):
 
         self.ax_preview.clear()
         self.ax_preview.set_facecolor('#111111')
+        self.ax_preview.set_title("Live Preview", fontsize=9, fontweight='bold', pad=4,
+                                  color=_TICK_COLOR)
 
         if img.ndim == 3:
             img = img[0, :, :]
@@ -740,28 +818,13 @@ class ModelTrainerSplit(QWidget):
         self.ax_preview.imshow(img, cmap='gray', aspect=pixel_aspect,
                                vmin=0.0, vmax=1.0)
 
-        self.ax_legend.clear()
-        self.ax_legend.axis('off')
-        self.ax_legend.set_title("Segmentation Legend", fontsize='small')
-
         if mask is not None:
             masked = np.ma.masked_where(mask == 0, mask)
             vmin, vmax = 0, self.model_config.out_channels
             self.ax_preview.imshow(masked, cmap='tab20', alpha=0.5,
                                    aspect=pixel_aspect, vmin=vmin, vmax=vmax)
-            if per_mask_dice:
-                cmap = plt.get_cmap('tab20')
-                legend_elements = [
-                    Patch(facecolor=cmap((i + 1) / vmax if vmax > 0 else 0),
-                          label=f"{name}: {score:.3f}", alpha=0.7)
-                    for i, (name, score) in enumerate(per_mask_dice.items())
-                ]
-                self.ax_legend.legend(
-                    handles=legend_elements, loc='upper left',
-                    fontsize='x-small', title="Dice per Organ",
-                    title_fontsize='x-small', framealpha=0.8,
-                    bbox_to_anchor=(0, 1), borderaxespad=0
-                )
+
+        self._update_legend_widget(per_mask_dice, self.model_config.out_channels)
 
         self.ax_preview.axis('off')
         self.canvas.draw()
@@ -772,20 +835,15 @@ class ModelTrainerSplit(QWidget):
         QMessageBox.critical(self, "Error", f"Training is stopping:\n{err}")
         self.progressBar.setValue(0)
         self.progress_Label.setText("Error occurred.")
+        self._reset_monitor()
         self._reset_ui_state()
 
     def on_training_stopped(self):
         self._status_btn(False)
         self.progressBar.setValue(0)
         self.progress_Label.setText("")
-        self.loss_history = []
-        self.val_loss_history = []
-        self.ax_loss.clear()
-        self.ax_preview.clear()
-        self.ax_legend.clear()
-        self.ax_legend.axis('off')
-        self.canvas.draw()
-        self._clear_paths_and_data()
+        self._reset_monitor()
+        #self._clear_paths_and_data()
         QMessageBox.information(self, "Stopped", "Training stopped correctly.")
 
     def _clear_paths_and_data(self):
