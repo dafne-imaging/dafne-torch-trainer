@@ -468,22 +468,23 @@ class ModelTrainerSplit(QWidget):
         preview_group.setStyleSheet(group_style)
         preview_group.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         pg_layout = QVBoxLayout(preview_group)
-        pg_layout.setContentsMargins(4, 12, 4, 4)
+        pg_layout.setContentsMargins(0, 10, 0, 0) # Minimal padding
 
-        self.fig_prev = plt.figure(constrained_layout=True, facecolor=_FIG_BG)
+        # Use a non-constrained layout for the preview to have full control over margins
+        self.fig_prev = plt.figure(facecolor=_FIG_BG)
         self.canvas_prev = FigureCanvas(self.fig_prev)
         self.canvas_prev.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.canvas_prev.setMinimumSize(10, 10)
         pg_layout.addWidget(self.canvas_prev)
-        preview_row_layout.addWidget(preview_group, stretch=10)
+        preview_row_layout.addWidget(preview_group, stretch=1) # Reduced stretch to be more adherent
 
-        self.ax_preview = self.fig_prev.add_subplot(111)
+        self.ax_preview = self.fig_prev.add_axes([0, 0, 1, 1]) # Occupy 100% of the figure
         self.ax_preview.set_facecolor('#111111')
         self.ax_preview.axis('off')
 
         # ── Qt legend panel ─────────────────
         legend_group = QGroupBox("Segmentation Legend")
-        legend_group.setFixedWidth(220)
+        legend_group.setFixedWidth(200)
         legend_group.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         legend_group.setStyleSheet(group_style)
 
@@ -523,10 +524,11 @@ class ModelTrainerSplit(QWidget):
         """Restore the Training Monitor to its initial empty state."""
         self.loss_history = []
         self.val_loss_history = []
+        self.ax_loss.clear()
         self.ax_preview.clear()
         self._style_loss_ax()
         self.ax_preview.set_facecolor('#111111')
-        self.ax_preview.axis('off')
+        self.ax_preview.set_axis_off()
         self._clear_legend_widget()
         self.canvas_loss.draw()
         self.canvas_prev.draw()
@@ -842,7 +844,7 @@ class ModelTrainerSplit(QWidget):
 
         self._update_legend_widget(per_mask_dice, self.model_config.out_channels)
 
-        self.ax_preview.axis('off')
+        self.ax_preview.set_axis_off()
         self.canvas_loss.draw()
         self.canvas_prev.draw()
         QtWidgets.QApplication.processEvents()
