@@ -8,19 +8,15 @@ from .FineTuningDialog import FineTuningDialog
 
 from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QFileDialog, 
+    QWidget, QVBoxLayout, QFileDialog,
     QMessageBox, QDialog
 )
+from PyQt5.QtGui import QIcon
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
-from ..config.config_params import ModelConfig, \
-                                        DatasetConfig, \
-                                        TrainingConfig, \
-                                        AugmentationConfig, \
-                                        LoraConfig, \
-                                        InferenceMetricsConfig
+from .training_controller import build_training_configs
 
 import numpy as np
 
@@ -40,8 +36,18 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         y = (monitor_dim.height() - height) // 2
         self.move(int(x), int(y))
         self.setWindowTitle('Dafne Model Trainer (PyTorch Backend)')
+        _icon_path = os.path.join(os.path.dirname(__file__), '..', 'icons', 'icon_dafne_trainer.png')
+        self.setWindowIcon(QIcon(_icon_path))
         
         self.verticalLayout.setSizeConstraint(QtWidgets.QLayout.SetNoConstraint)
+
+        # Allow fit_output_box to grow/shrink with the window
+        self.fit_output_box.setMinimumSize(QtCore.QSize(0, 0))
+        self.fit_output_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Expanding
+        )
+        self.verticalLayout.setStretchFactor(self.fit_output_box, 1)
 
         self.save_path = None
         self.worker = None #training thread
@@ -58,6 +64,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.adaptation_params = {
             'mode': 'scratch',
             'freeze_degree': 0.5,
+            'gradual_unfreeze': False,
             'lora_rank': 8,
             'lora_alpha': 16
         }
@@ -101,15 +108,20 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
 
         self.fit_Button.clicked.connect(self.start_training)
     
-    def _init_matplotlib_canvas(self):      
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, 'canvas') and self.fit_output_box.isVisible():
+            self.canvas.draw_idle()
+
+    def _init_matplotlib_canvas(self):
         self.pyplot_layout = QVBoxLayout(self.fit_output_box)
-        self.fig = plt.figure(figsize=(2, 2)) 
-        
+        self.fig = plt.figure(constrained_layout=True)
+
         self.canvas = FigureCanvas(self.fig)
-        self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Ignored, 
-                                  QtWidgets.QSizePolicy.Ignored)
-        self.canvas.setMinimumSize(10, 10) 
-        
+        self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Expanding,
+                                  QtWidgets.QSizePolicy.Expanding)
+        self.canvas.setMinimumSize(10, 10)
+
         self.canvas.updateGeometry()
 
         self.pyplot_layout.addWidget(self.canvas)
@@ -287,92 +299,32 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
         self.progressBar.setValue(0)
         self.progress_Label.setText("Inizialization...")
 
-        n_levels = self.levels_spin.value()
-        kernel_size = self.kernsize_spin.value()
-        # conv_layers = self.convlayers_spin.value()
-
-        batch_size = self.batch_spin.value()
-        lr = self.lr_spin.value()
-        epochs = self.epochs_spin.value()
-
-        early_stopping = self.early_stopping_check.isChecked()
-        spatial_dims = self.model_3d_check.isChecked()
-
-        dyn_unet = self.check_auto_params.isChecked()
-
-        dataset_config = DatasetConfig(
-            root_dir=self.location_Text.text(),
-            val_split=0.2,
-            random_seed=42
-        )
-
-        self.model_config = ModelConfig(
-            model_name='dynunet' if dyn_unet else 'unet',
-            spatial_dims=3 if spatial_dims else 2,
-            out_channels=2,
-            in_channels=1,
-            use_dynamic=dyn_unet,
-            extra_params={
-                'n_levels': n_levels,
-                'kernel_size': kernel_size,
-                'kernels': None,
-                'strides': None
-            }
-        )
-
-        augm_config = AugmentationConfig(
-            rotate=self.augm_params['rotate'],
-            flip_x=self.augm_params['flip_x'],
-            flip_y=self.augm_params['flip_y'],
-            zoom=self.augm_params['zoom'],
-            noise=self.augm_params['noise'],
-        )
-
-        train_config = TrainingConfig(
-            epochs=epochs,
-            learning_rate=lr,
-            batch_size=batch_size,
-            augmentation=augm_config,
-            pretrained_model_path=self.pretrained_path,
+        configs = build_training_configs(
+            data_path=self.location_Text.text(),
+            pretrained_path=self.pretrained_path,
+            n_levels=self.levels_spin.value(),
+            kernel_size=self.kernsize_spin.value(),
+            conv_layers=self.convlayers_spin.value(),
+            is_3d=self.model_3d_check.isChecked(),
+            use_dynunet=self.check_auto_params.isChecked(),
+            epochs=self.epochs_spin.value(),
+            batch_size=self.batch_spin.value(),
+            lr=self.lr_spin.value(),
+            early_stopping=self.early_stopping_check.isChecked(),
             mixed_precision=self.mixed_precision_check.isChecked(),
-            early_stopping=early_stopping,
-            scheduler=self.scheduler_check.isChecked()
+            scheduler=self.scheduler_check.isChecked(),
+            augm_params=self.augm_params,
+            adaptation_params=self.adaptation_params,
         )
 
-        inference_config = InferenceMetricsConfig(
-            include_background=False,
-            reduction='mean_batch'
-        )
-
-
-        # Add adaptation parameters
-        mode = self.adaptation_params.get('mode', 'scratch')
-        if mode == 'finetune':
-            self.model_config.fine_tuning = True
-            self.model_config.percent_to_freeze = self.adaptation_params.get('freeze_degree', 0.5)
-            self.model_config.gradual_unfreezing = self.adaptation_params.get('gradual_unfreeze', False)
-        elif mode == 'lora':
-            self.model_config.fine_tuning = True
-            self.model_config.percent_to_freeze = None
-            # Default to all layers for now
-            self.model_config.lora_config = LoraConfig(
-                r=self.adaptation_params.get('lora_rank', 8),
-                lora_alpha=self.adaptation_params.get('lora_alpha', 16),
-                lora_dropout=0.1,
-                rank_for='channels',
-                target_modules=['.*']
-            )
-        else: # scratch
-            self.model_config.fine_tuning = False
-            self.model_config.percent_to_freeze = None
-            self.model_config.lora_config = None
+        self.model_config = configs['model_config']
 
         self.worker = TrainingWorker(
-            dataset_config = dataset_config,
-            model_config = self.model_config,
-            train_config = train_config,
-            inference_metrics = inference_config,
-            save_path = self.save_path,
+            dataset_config=configs['dataset_config'],
+            model_config=configs['model_config'],
+            train_config=configs['train_config'],
+            inference_metrics=configs['inference_config'],
+            save_path=self.save_path,
         )
 
         self.worker.sig_update_plot.connect(self.update_plots)
@@ -461,14 +413,15 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
                 for i, (name, score) in enumerate(per_mask_dice.items()):
                     color_idx = (i + 1) / vmax if vmax > 0 else 0
                     color = cmap(color_idx)
-                    legend_elements.append(Patch(facecolor=color, 
-                                                label=f"{name}: {score:.3f}", 
+                    legend_elements.append(Patch(facecolor=color,
+                                                label=f"{name}: {score:.3f}",
                                                 alpha=0.6))
-                self.ax_preview.legend(handles=legend_elements, 
-                                     loc='upper left', 
-                                     bbox_to_anchor=(1.05, 1), 
-                                     fontsize='small',
-                                     title="Dice per Organ")
+                self.ax_preview.legend(handles=legend_elements,
+                                     loc='lower left',
+                                     fontsize='x-small',
+                                     title="Dice per Organ",
+                                     title_fontsize='x-small',
+                                     framealpha=0.6)
         self.ax_preview.axis('off')
         self.canvas.draw()
 
