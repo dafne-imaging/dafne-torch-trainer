@@ -80,6 +80,7 @@ class InferenceMetricsConfig:
     include_background: bool = False
     reduction: str = "mean_batch"
 
+    compute_dice: bool = True
     compute_hausdorff_95: bool = True
     compute_surface_distance: bool = True
     compute_precision: bool = True
