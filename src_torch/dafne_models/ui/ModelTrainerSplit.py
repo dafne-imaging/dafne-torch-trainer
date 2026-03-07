@@ -489,7 +489,7 @@ class ModelTrainerSplit(QWidget):
 
         # ── Qt legend panel ─────────────────
         legend_group = QGroupBox("Segmentation Legend")
-        legend_group.setFixedWidth(200)
+        legend_group.setFixedWidth(220)
         legend_group.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         legend_group.setStyleSheet(group_style)
 
@@ -578,7 +578,7 @@ class ModelTrainerSplit(QWidget):
 
             score_lbl = QLabel(f"{score:.3f}")
             score_lbl.setStyleSheet("font-size: 10pt; color: #555; font-weight: bold;")
-            score_lbl.setFixedWidth(50)
+            score_lbl.setFixedWidth(60)
             score_lbl.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
 
             rl.addWidget(patch)
