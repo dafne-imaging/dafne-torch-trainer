@@ -1,7 +1,7 @@
 import os
 import sys
 
-from ..core.training_worker_engine import TrainingWorkerEngine
+from ..core.training_worker_engine import TrainingWorker
 #from ..core.training_worker import TrainingWorker
 from .AugmentationDialog_Ui import AugmentationDialog
 from .FineTuningDialog import FineTuningDialog

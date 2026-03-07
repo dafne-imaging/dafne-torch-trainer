@@ -34,8 +34,8 @@ class TrainingWorker(QThread):
         for future incremental learning in fine-tuning
     '''
     
-    # Send data to cpu (float, numpy, numpy, float, numpy, float)
-    sig_update_plot = pyqtSignal(int, float, object, object, float, object, float, dict)
+    # Send data to cpu (float, numpy, numpy, float, numpy, float, dict)
+    sig_update_plot = pyqtSignal(float, object, object, float, object, float, dict)
 
     # Send status information for user console
     sig_status = pyqtSignal(str)
