@@ -576,15 +576,14 @@ class ModelTrainerSplit(QWidget):
             name_lbl.setTextFormat(QtCore.Qt.RichText)
             name_lbl.setStyleSheet("font-size: 10pt; color: #222;")
 
-            score_lbl = QLabel(f"{score:.3f}")
+            score_lbl = QLabel(f": {score:.3f}")
             score_lbl.setStyleSheet("font-size: 10pt; color: #555; font-weight: bold;")
-            score_lbl.setFixedWidth(60)
-            score_lbl.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            score_lbl.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
 
             rl.addWidget(patch)
             rl.addWidget(name_lbl)
-            rl.addStretch()
             rl.addWidget(score_lbl)
+            rl.addStretch()
 
             self.legend_layout.addWidget(row_w)
 
