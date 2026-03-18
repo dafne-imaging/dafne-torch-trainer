@@ -204,9 +204,10 @@ def run_training(model_config: ModelConfig,
         save_dir = os.path.dirname(save_path)
         model_filename = os.path.basename(save_path).split('.')[0]
         best_weights_path = os.path.join(save_dir, f"{model_filename}_best_model.pth")
-        best_weights = torch.load(best_weights_path, map_location='cpu')
-        model.load_weights(best_weights)
-        
+        if os.path.exists(best_weights_path):
+            best_weights = torch.load(best_weights_path, map_location='cpu')
+            model.load_weights(best_weights)
+
         sig_status("Packaging the model into .model format...")
         try:
             model.save_model_and_metadata(model_config,
