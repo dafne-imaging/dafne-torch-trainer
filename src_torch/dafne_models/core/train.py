@@ -83,14 +83,14 @@ def run_training(model_config: ModelConfig,
         data_module.setup() # setup data file into train and validation
         data_list = data_module.data_list
 
-        sig_status.emit(f"Training initialization on: {device} device")
-        sig_status.emit(f"Dataset loading ({len(data_list)} files...)")
+        sig_status(f"Training initialization on: {device} device")
+        sig_status(f"Dataset loading ({len(data_list)} files...)")
 
         data_fingerprint = DatasetFingerprint(data_module.train_files, spatial_dims=model_config.spatial_dims)
         model_config.labels_name = data_fingerprint.get_labels_name()
-        
+
         if model_config.fine_tuning:
-            sig_status.emit("Fine-tuning mode")
+            sig_status("Fine-tuning mode")
 
             from dafne_dl.DynamicTorchModel import DynamicTorchModel
             with open(train_config.pretrained_model_path, "rb") as f:
@@ -113,7 +113,7 @@ def run_training(model_config: ModelConfig,
         
             data_builder = TransformBuilderFineTuning(model_config, train_config)
         else:
-            sig_status.emit("Training from scratch mode")
+            sig_status("Training from scratch mode")
             model_config.median_shape = data_fingerprint.data_shape.tolist()
             model_config.median_spacing = data_fingerprint.data_spacing.tolist()
             data_builder = TransformBuilderTraining(model_config, train_config, data_fingerprint)
@@ -192,8 +192,8 @@ def run_training(model_config: ModelConfig,
             epoch = engine.state.epoch
             total = engine.state.max_epochs
             loss = engine.state.metrics.get('avg_loss', 0.0)
-            sig_progress.emit(int((epoch / total) * 100))
-            sig_status.emit(f"Epoch {epoch}/{total} | Loss: {loss:.3f}")
+            sig_progress(int((epoch / total) * 100))
+            sig_status(f"Epoch {epoch}/{total} | Loss: {loss:.3f}")
 
         trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, on_epoch_progress)
 
@@ -207,15 +207,15 @@ def run_training(model_config: ModelConfig,
         best_weights = torch.load(best_weights_path, map_location='cpu')
         model.load_weights(best_weights)
         
-        sig_status.emit("Packaging the model into .model format...")
+        sig_status("Packaging the model into .model format...")
         try:
-            model.save_model_and_metadata(model_config, 
-                                            train_config, 
+            model.save_model_and_metadata(model_config,
+                                            train_config,
                                             save_path)
-            sig_status.emit("Model packaged successfully")
+            sig_status("Model packaged successfully")
         except Exception as e:
             traceback.print_exc()
-            sig_error.emit(str(e))
+            sig_error(str(e))
 
         if os.path.exists(best_weights_path):
             os.remove(best_weights_path)
@@ -232,13 +232,13 @@ def run_training(model_config: ModelConfig,
             torch.cuda.empty_cache()
 
         if _callback_check_stop and _callback_check_stop():
-            sig_stopped.emit()
+            sig_stopped()
         else:
-            sig_finished.emit()
+            sig_finished()
 
     except Exception as e:
         traceback.print_exc()
-        sig_error.emit(str(e))
+        sig_error(str(e))
     finally:
         import gc
         if model is not None:
