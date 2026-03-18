@@ -1,6 +1,6 @@
 #git dependencies
-dafne-dl-torch_models @ git+https://github.com/GiuseppeTimpano/dafne-dl.git@torch_models                                
-dafne-inference @ git+https://github.com/GiuseppeTimpano/dafne-inference.git
+dafne-dl-master @ git+https://github.com/dafne-imaging/dafne-dl.git@master
+dafne-monai-inference @ git+https://github.com/dafne-imaging/dafne-monai-inference.git@main
 
 #Core
 torch>=2.0                                                                                                              

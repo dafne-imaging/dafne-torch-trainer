@@ -1,10 +1,11 @@
-import sys 
+import sys
 import os
 import torch
 import numpy as np
 import dill
 import argparse
 import json
+import uuid
 from collections import OrderedDict
 
 from dafne_dl.DynamicTorchModel import DynamicTorchModel
@@ -26,7 +27,10 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
 
     metadata = {
         'net_metadata': net_metadata,
-        'train_metadata': train_metadata
+        'train_metadata': train_metadata,
+        'dependencies': {
+            'dafne_inference': 'dafne-monai-inference @ git+https://github.com/dafne-imaging/dafne-monai-inference.git@main'
+        }
     }
 
     clean_params = {}
@@ -67,7 +71,7 @@ def build_model():
     build_model_baked.source = build_model_src
 
     dynamic_model = DynamicTorchModel(
-        model_id="Dafne_Custom_Model",
+        model_id=uuid.uuid4(),
         init_model_function=build_model_baked,
         apply_model_function=apply_network_inf,
         weights=weights,  
