@@ -489,8 +489,9 @@ class ModelTrainerSplit(QWidget):
 
         # ── Qt legend panel ─────────────────
         legend_group = QGroupBox("Segmentation Legend")
-        legend_group.setFixedWidth(220)
-        legend_group.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
+        legend_group.setMinimumWidth(220)
+        legend_group.setMaximumWidth(340)
+        legend_group.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         legend_group.setStyleSheet(group_style)
 
         scroll = QScrollArea()
@@ -574,6 +575,7 @@ class ModelTrainerSplit(QWidget):
 
             name_lbl = QLabel(f"<b>{name}</b>")
             name_lbl.setTextFormat(QtCore.Qt.RichText)
+            name_lbl.setWordWrap(True)
             name_lbl.setStyleSheet("font-size: 10pt; color: #222;")
 
             score_lbl = QLabel(f": {score:.3f}")
@@ -608,7 +610,7 @@ class ModelTrainerSplit(QWidget):
             # Parent/Container check to avoid overlap
             # Total width of monitor - (legend width + margins + spacing)
             container_w = self.fit_output_box.width()
-            legend_w = 200
+            legend_w = self.legend_container.width() if hasattr(self, 'legend_container') else 240
             spacing_margins = 40
             max_w = max(100, container_w - legend_w - spacing_margins)
             
