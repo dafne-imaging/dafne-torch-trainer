@@ -27,6 +27,8 @@ class ModelConfig:
     # model parameters
     model_name: str = 'unet'
     spatial_dims: int = 3
+    #dimensionality
+    
     out_channels: int = 2
     in_channels: int = 1
     use_dynamic: bool = False
@@ -35,6 +37,7 @@ class ModelConfig:
     median_spacing: tuple = None
     n_levels: int = 5
     labels_name: List[str] = None
+    #model_type
     
     # specific model parameters for monai model
     extra_params: dict = field(default_factory=dict)

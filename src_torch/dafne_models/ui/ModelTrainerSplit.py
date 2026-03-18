@@ -667,7 +667,7 @@ class ModelTrainerSplit(QWidget):
     def select_pretrained_path(self):
         filename, _ = QFileDialog.getOpenFileName(
             self, "Choose pretrained dafne model", "",
-            "Dafne Model (*.dafne);;All files (*)"
+            "Dafne Model (*.model);;All files (*)"
         )
         if filename:
             self.pretrained_path = filename
@@ -686,11 +686,11 @@ class ModelTrainerSplit(QWidget):
     def select_save_path(self):
         filename, _ = QFileDialog.getSaveFileName(
             self, "Choose save model path", "",
-            "Dafne Model (*.dafne);;Pytorch Model (*.pth);;All files (*)"
+            "Dafne Model (*.model);;Pytorch Model (*.pth);;All files (*)"
         )
         if filename:
             if '.' not in os.path.basename(filename):
-                filename += '.dafne'
+                filename += '.model'
             self.save_path = filename
             self.model_location_Text.setText(filename)
 

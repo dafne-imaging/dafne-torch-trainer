@@ -17,7 +17,7 @@ class CSVLoggingCallback(BaseCallback):
     '''
     def __init__(self, save_path: str, labels_name: list = None):
         super().__init__()
-        self.csv_path = save_path.replace('.dafne', '.csv') if save_path else None
+        self.csv_path = save_path.replace('.model', '.csv') if save_path else None
         self.labels_name = labels_name or []
         self._best = -float('inf')
 

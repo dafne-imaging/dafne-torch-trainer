@@ -248,7 +248,7 @@ class TrainingWorker(QThread):
             best_weights = torch.load(best_weights_path, map_location='cpu')
             self.model.load_weights(best_weights)
             
-            self.sig_status.emit("Packaging the model into .dafne format...")
+            self.sig_status.emit("Packaging the model into .model format...")
             try:
                 self.model.save_model_and_metadata(self.model_config, 
                                                 self.train_config, 

@@ -13,6 +13,8 @@ from monai.data.utils import pad_list_data_collate
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
+from .train import run_training
+
 from ..utils.data_fingerprint import DatasetFingerprint
 
 from .engine.factory import create_supervised_trainer
@@ -106,10 +108,11 @@ class TrainingWorker(QThread):
         # Optional: ensure that even dataloader workers are seeded (if used)
         os.environ['PYTHONHASHSEED'] = str(seed)
 
+    '''
     def run(self):
-        '''
-        Run training loop
-        '''
+        
+        #Run training loop
+        
         # Set reproducibility at the very beginning of the thread execution
         self.set_reproducibility(self.dataset_config.random_seed)
         
@@ -244,7 +247,7 @@ class TrainingWorker(QThread):
             best_weights = torch.load(best_weights_path, map_location='cpu')
             self.model.load_weights(best_weights)
             
-            self.sig_status.emit("Packaging the model into .dafne format...")
+            self.sig_status.emit("Packaging the model into .model format...")
             try:
                 self.model.save_model_and_metadata(self.model_config, 
                                                 self.train_config, 
@@ -287,6 +290,22 @@ class TrainingWorker(QThread):
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+        '''
 
     def stop(self):
-        self.is_running = False            
+        self.is_running = False      
+
+    def run(self):
+        run_training(self.model_config, self.dataset_config,
+                     self.inference_metrics,
+                     self.train_config,
+                     self.save_path, 
+                     self.sig_status, 
+                     self.sig_progress,
+                     self._callback_log,
+                     self._callback_check_stop,
+                     self.sig_update_plot,
+                     self.sig_error,
+                     self.sig_stopped,
+                     self.sig_finished,
+                     self.device)

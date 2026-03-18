@@ -193,7 +193,7 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self,
             "Choose pretrained dafne model",
             "",
-            "Dafne Model (*.dafne);;All files (*)",
+            "Dafne Model (*.model);;All files (*)",
             options=options
         )
 
@@ -225,14 +225,14 @@ class ModelTrainer(QWidget, Ui_ModelTrainerUI):
             self,
             "Choose save model path",
             "",
-            "Dafne Model (*.dafne);;Pytorch Model (*.pth);;All files (*)",
+            "Dafne Model (*.model);;Pytorch Model (*.pth);;All files (*)",
             options=options
         )
 
         if filename:
-            # Add .dafne extension if no extension is provided
+            # Add .model extension if no extension is provided
             if not '.' in os.path.basename(filename):
-                filename += '.dafne'
+                filename += '.model'
         
         self.save_path = filename
         self.model_location_Text.setText(filename)

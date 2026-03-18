@@ -59,9 +59,9 @@ class DafneModelWrapper(nn.Module):
         train_metadata = asdict(training_config)
         
         if save_path.endswith('.pth'):
-            save_path = save_path.replace('.pth', '.dafne')
-        elif not save_path.endswith('.dafne'):
-            save_path += '.dafne'
+            save_path = save_path.replace('.pth', '.model')
+        elif not save_path.endswith('.model'):
+            save_path += '.model'
             
         with open(save_path, 'wb') as f:
             create_dynamic_model(weights=self.get_state_dict(), 
