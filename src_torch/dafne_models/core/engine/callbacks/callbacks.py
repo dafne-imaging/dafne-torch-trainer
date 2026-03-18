@@ -135,7 +135,7 @@ class VisualizationCallback(BaseCallback):
         vis_data = engine.state.pred_dice_per_mask
         per_mask_dice_score = {k: v for k, v in engine.state.metrics.items() if k.startswith('dice_')}
         
-        self.sig_update_plot.emit(
+        self.sig_update_plot(
             avg_loss,
             vis_data['image'],
             vis_data['mask'],
