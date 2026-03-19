@@ -84,10 +84,69 @@ src_torch/dafne_models/
         optimizer.py        # Optimizer utilities (discriminative LR helpers)
 ```
 
+## CLI usage
+
+### Training from scratch
+
+```
+dafne_train --data <data_dir> --output <output_path> [options]
+```
+
+| Argument | Short | Default | Description |
+|---|---|---|---|
+| `--data` | `-d` | required | Path to the folder containing training data |
+| `--output` | `-o` | required | Output path for the `.model` file |
+| `--epochs` | | 50 | Number of training epochs |
+| `--batch-size` | | 2 | Batch size |
+| `--lr` | | 0.001 | Learning rate |
+| `--3d` | | off | Train a 3D model (default: 2D) |
+| `--dynunet` | | off | Use Dynamic U-Net with auto-computed parameters |
+| `--levels` | | 5 | Number of U-Net encoder/decoder levels |
+| `--kernel-size` | | 3 | Convolution kernel size |
+| `--conv-layers` | | 2 | Number of convolutional layers per level |
+| `--early-stopping` | | off | Stop training when validation loss stops improving |
+| `--mixed-precision` | | off | Enable AMP (automatic mixed precision) |
+| `--scheduler` | | off | Enable learning rate scheduler |
+
+Example:
+```
+dafne_train -d /data/training_set -o /models/my_model.model --epochs 100 --lr 0.0005 --early-stopping
+```
+
+### Fine-tuning an existing model
+
+Pass `--pretrained` with the path to an existing `.model` file, and set `--mode` to `finetune` or `lora`.
+
+```
+dafne_train --data <data_dir> --output <output_path> --pretrained <model_path> --mode finetune [options]
+```
+
+| Argument | Default | Description |
+|---|---|---|
+| `--pretrained` | none | Path to a pretrained `.model` file |
+| `--mode` | `scratch` | Training mode: `scratch`, `finetune`, or `lora` |
+| `--freeze-degree` | 0.5 | Fraction of layers to freeze (used with `--mode finetune`) |
+| `--gradual-unfreeze` | off | Gradually unfreeze frozen layers during training |
+| `--lora-rank` | 8 | LoRA rank (used with `--mode lora`) |
+| `--lora-alpha` | 16 | LoRA alpha scaling factor (used with `--mode lora`) |
+
+Example — fine-tuning with 70% of layers frozen:
+```
+dafne_train -d /data/new_data -o /models/finetuned.model --pretrained /models/base.model \
+    --mode finetune --freeze-degree 0.7 --gradual-unfreeze --epochs 30
+```
+
+Example — LoRA adaptation:
+```
+dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.model \
+    --mode lora --lora-rank 8 --lora-alpha 16 --epochs 30
+```
+
 ## Training modes
 
-- **From scratch**: network architecture and preprocessing are derived automatically from dataset statistics (median spacing, median shape, label count).
-- **Fine-tuning**: loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing, gradual unfreezing, and LoRA adaptation.
+- **From scratch** (`--mode scratch`): network architecture and preprocessing are derived automatically from dataset statistics (median spacing, median shape, label count).
+- **Fine-tuning** (`--mode finetune`): loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing and gradual unfreezing.
+- **LoRA** (`--mode lora`): injects low-rank adapter layers into the frozen base model. Only adapter weights are trained. Useful for adaptation with very little data.
 
 ## Notes
 
