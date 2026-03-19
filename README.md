@@ -1,66 +1,95 @@
-# dafne-models
-Repository for model generators
+# dafne-torch-trainer
 
-## Important!
-git-lfs is required to properly check out the model weights for the "thigh" and "leg" models.
+PyTorch-based model trainer for the Dafne segmentation framework. Trains 2D and 3D U-Net-style models on medical images (NIfTI format) and serializes them into the `.model` format used by `dafne-dl`.
 
-## How to use the model trainer
-The model trainer is a python script that can be used to train a model on a set of images.
-It is based on the keras library and uses a tensorflow backend. The model architecture is 2D and is the 
-same as the "thigh" and "leg" models, that is, a modified V-Net.
+## Dependencies
 
-The input data is in the form of "Numpy bundle" files, which contain the image dataset with the "data" key,
-the resolution under the "resolution" key, in the form of a numpy vector with 2 or 3 elements corresponding
-to the voxel size in the three dimensions, and various binary masks in the form of 3D numpy arrays with the same
-dimensions as the data with "mask_<roi1>", "mask_<roi2>" etc. keys (where <roi1> and <roi2> are the names of the
-regions of interest, e.g. mask_tibia, mask_fibula, etc).
+- `dafne-dl` (from `dafne-imaging/dafne-dl`, branch `master`)
+- `dafne-monai-inference` (from `dafne-imaging/dafne-monai-inference`, branch `main`)
+- PyTorch >= 2.0, MONAI >= 1.3, PyQt5 >= 5.15
 
-This numpy bundle can (and should) be saved from Dafne by selecting the "Export masks"->"Numpy bundle" option.
+See `requirements.txt` for the full list.
 
-Once multiple such datasets are collected under the same folder, the model trainer can be used.
+## Installation
 
-### Usage
-The recommended usage is by using the GUI for fitting, as it allows a wider range of options.
-Assuming you have cloned the dafne_models repository, install it locally together with its dependencies with
+```
+pip install -e .
+```
 
-```pip install -e .[gui]```
+Requires Python >= 3.9. A CUDA-capable GPU is strongly recommended for training.
 
-Then, run the GUI with
+## Entry points
 
-```python create_model_ui.py```
+| Command | Description |
+|---|---|
+| `dafne_trainer` | Launch the PyQt5 GUI trainer |
+| `dafne_train` | Command-line training interface |
 
-or simply with
+## Input data format
 
-```create_model_ui```
+Training data must be NIfTI files (`.nii` or `.nii.gz`) organized as image/mask pairs. Masks are binary volumes where each file represents one region of interest. The data folder structure expected by the data loader is configured via the GUI or the CLI config.
 
-Load the data by clicking on "Choose" next to the "Data location" field and selecting the folder containing 
-the numpy bundles.
-Then, select the model name and the output folder and click on "Fit model". The model will start training.
-You can monitor the progress from the plots that will be displayed. On the right, one segmentation of a validation
-slice is displayed at the end of every epoch. The slider on the bottom chooses which validation slice is displayed.
-Next to it, a checkbox lets the user choose whether the training should be stopped when the validation loss starts
-to increase. This is useful to avoid overfitting, but the user can choose to stop it manually instead.
+## Output
 
-The model will be saved in the output folder as a keras model (.hdf5 file) and as a dafne model (.model file). A .py
-file is also saved to build the .model file from the .hdf5 file.
+Training produces a `.model` file (serialized via `dafne-dl`'s `DynamicTorchModel`). The file embeds:
 
-### Importing a new model into Dafne
-The model can be imported into Dafne by selecting "Local" as the model location in the settings, and then choosing
-"Import model" from the "File" menu. If ou don't see "Import model" under the "File" menu, double-check that the
-Model location is set to "Local".
+- model weights
+- network architecture metadata (model name, spatial dims, patch size, spacing, etc.)
+- training metadata
+- a dependency hint pointing to `dafne-monai-inference` for inference-time use
 
-### Caveats
-It is highly recommended to have a correctly configured GPU for the training. Make sure that you have tensorflow
-installed for the python version that you are using, and that the GPU libraries are compatible with this tensorflow
-version.
+A `_best_model.pth` checkpoint is saved during training and removed after the final `.model` is packaged.
 
-## Command line usage
-A command-line model trainer is also provided. It can be used to train a model from the command line, without
-the GUI. It is recommended to use the GUI instead, as it allows a wider range of options.
+## Project structure
 
-To train a model from the command line, run
+```
+src_torch/dafne_models/
+    bin/                    # CLI entry points and model serialization
+        train_cli.py        # CLI trainer
+        create_torch_model.py  # DynamicTorchModel creation and serialization
+    config/
+        config_params.py    # Dataclasses for model, dataset, training, and metrics config
+    core/
+        data_manager.py     # Dataset split, CacheDataset, DataLoader construction
+        train.py            # Main training loop (called by GUI and CLI)
+        training_worker_engine.py  # PyQt5 QThread worker that wraps train.py
+        transform/
+            transforms_builder.py   # MONAI transform pipelines for training and fine-tuning
+            custom_transforms.py    # Project-specific custom transforms
+        engine/
+            trainer_engine.py   # Custom training engine (trainer + evaluator loop)
+            factory.py          # Engine factory (assembles trainer with callbacks)
+            state.py            # Engine state dataclass
+            events.py           # Engine event enum
+            tasks/
+                supervised_task.py  # Forward pass, loss, optimizer step
+            callbacks/
+                callbacks.py        # MetricsCallback, CheckpointCallback, EarlyStoppingCallback,
+                                    # VisualizationCallback, GradualUnfreezeCallback, ClearGPUMemory
+                save_metrics_callbacks.py  # TensorBoard and CSV logging
+    models/
+        dafne_networks.py   # Network architecture definitions
+        factory.py          # ModelFactory: instantiation, LoRA wrapping, layer freezing
+        wrapper.py          # DafneModelWrapper: load/save weights and metadata
+        lora/
+            layers.py       # LoRA linear layers
+            lora_models.py  # LoRA model wrapping utilities
+    ui/
+        ModelTrainerSplit.py    # Main PyQt5 GUI window
+        training_controller.py # GUI-side training control logic
+        FineTuningDialog.py     # Fine-tuning options dialog
+        AugmentationDialog_Ui.py  # Augmentation settings dialog (generated UI)
+    utils/
+        data_fingerprint.py # Dataset statistics: spacing, shape, label count
+        optimizer.py        # Optimizer utilities (discriminative LR helpers)
+```
 
-```python create_model.py <model_name> <data folder>```
+## Training modes
 
-where <data_folder> is the folder containing the numpy bundles, and <model_name> is the name of the model
-to be trained. The model will be saved in the current folder.
+- **From scratch**: network architecture and preprocessing are derived automatically from dataset statistics (median spacing, median shape, label count).
+- **Fine-tuning**: loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing, gradual unfreezing, and LoRA adaptation.
+
+## Notes
+
+- Spurious/legacy files still present but unused: `core/pytorch_loop.py`, `core/training_worker.py`, `core/utils.py`, `ui/ModelTrainer.py`, `ui/ModelTrainer_Ui.py`. These can be removed.
+- The `build/` directory at the repo root can also be removed.
