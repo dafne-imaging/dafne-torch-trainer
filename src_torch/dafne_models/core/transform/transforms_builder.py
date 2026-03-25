@@ -40,12 +40,12 @@ def build_transform_list(keys:list,
 
         if train_transforms:
             pipeline.append(
-                SpatialPadd(keys=['image', 'mask'], spatial_size=(16, 96, 96), method='symmetric')
+                SpatialPadd(keys=['image', 'mask'], spatial_size=(32, 96, 96), method='symmetric')
             )
-            pipeline.append( 
+            pipeline.append(
                 RandCropByPosNegLabeld(
                     keys=['image', 'mask'], label_key='mask',
-                    spatial_size=(16, 96, 96), # Patch 3D
+                    spatial_size=(32, 96, 96), # Patch 3D
                     pos=3, neg=1, num_samples=4,
                     image_key='image', image_threshold=0
                 )
@@ -63,7 +63,7 @@ def build_transform_list(keys:list,
                 pipeline.append(RandGaussianNoised(keys=['image'], prob=0.5, std=0.05))
         else:
             pipeline.append(
-                SpatialPadd(keys=['image', 'mask'], spatial_size=(16, 96, 96), method='symmetric')
+                SpatialPadd(keys=['image', 'mask'], spatial_size=(32, 96, 96), method='symmetric')
             )
 
         pipeline.append(ToTensord(keys=['image', 'mask']))
@@ -246,7 +246,7 @@ class TransformBuilderTraining(AbstractTransformBuilder):
         Build transforms for unet
         '''
             
-        self.model_config.patch_size = (16, 96, 96) if self.model_config.spatial_dims == 3 else None
+        self.model_config.patch_size = (32, 96, 96) if self.model_config.spatial_dims == 3 else None
         median_spacing = self.data_fingerprint.data_spacing
         
         augm_params_dict = asdict(self.training_config.augmentation)
