@@ -29,7 +29,7 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
         'net_metadata': net_metadata,
         'train_metadata': train_metadata,
         'dependencies': {
-            'dafne_inference': 'dafne-monai-inference @ git+https://github.com/dafne-imaging/dafne-monai-inference.git@main'
+            'dafne_inference': 'dafne-monai-inference>=0.1.0'
         }
     }
 
