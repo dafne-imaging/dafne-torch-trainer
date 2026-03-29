@@ -87,7 +87,6 @@ def run_training(model_config: ModelConfig,
         sig_status(f"Dataset loading ({len(data_list)} files...)")
 
         data_fingerprint = DatasetFingerprint(data_module.train_files, spatial_dims=model_config.spatial_dims)
-        model_config.labels_name = data_fingerprint.get_labels_name()
 
         if model_config.fine_tuning:
             sig_status("Fine-tuning mode")
@@ -124,7 +123,8 @@ def run_training(model_config: ModelConfig,
 
         out_channels = data_fingerprint.count_label_mask(data_module.train_files) #compute n_classes on train files
         model_config.out_channels = out_channels
-        model_config.labels_name = data_fingerprint.get_labels_name()
+        labels_name = [s.replace('mask_', '') for s in data_fingerprint.get_labels_name()] # mantain only labels name without 'mask' substring
+        model_config.labels_name = labels_name
         
         use_gradual_unfreezing = model_config.gradual_unfreezing and \
             model_config.fine_tuning 
