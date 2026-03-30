@@ -10,6 +10,14 @@ class LoraConfig:
     rank_for: str = "channels"
     target_modules: Optional[List[str]] = None
 
+    def __post_init__(self):
+        if self.r <= 0:
+            raise ValueError(f"LoRA rank r must be > 0, received: {self.r}")
+        if not 0 <= self.lora_dropout < 1:
+            raise ValueError(f"lora_dropout must be in [0, 1), received: {self.lora_dropout}")
+        if self.rank_for not in ("channels", "spatial"):
+            raise ValueError(f"rank_for must be 'channels' or 'spatial', received: {self.rank_for!r}")
+
 
 @dataclass
 class DatasetConfig:
@@ -19,6 +27,10 @@ class DatasetConfig:
     
     target_spacing: Optional[tuple] = None
     median_shape: Optional[tuple] = None
+
+    def __post_init__(self):
+        if not 0 < self.val_split < 1:
+            raise ValueError(f"val_split must be in (0, 1), received: {self.val_split}")
 
 
 @dataclass
@@ -50,6 +62,13 @@ class ModelConfig:
     # lora parameters
     lora_config: Optional[LoraConfig] = None
 
+    def __post_init__(self):
+        if self.spatial_dims not in (2, 3):
+            raise ValueError(f"spatial_dims must be 2 or 3, received: {self.spatial_dims}")
+        if self.percent_to_freeze is not None and not 0 <= self.percent_to_freeze <= 1:
+            raise ValueError(f"percent_to_freeze must be in [0, 1], received: {self.percent_to_freeze}")
+
+
 @dataclass
 class AugmentationConfig:
     rotate: bool = False
@@ -73,6 +92,14 @@ class TrainingConfig:
     mixed_precision: bool = False
     early_stopping: bool = False
     scheduler: bool = False
+
+    def __post_init__(self):
+        if self.epochs <= 0:
+            raise ValueError(f"epochs must be > 0, received: {self.epochs}")
+        if self.batch_size <= 0:
+            raise ValueError(f"batch_size must be > 0, received: {self.batch_size}")
+        if self.learning_rate <= 0:
+            raise ValueError(f"learning_rate must be > 0, received: {self.learning_rate}")
 
 
 @dataclass

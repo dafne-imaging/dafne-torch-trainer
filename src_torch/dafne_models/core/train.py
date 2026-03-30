@@ -77,7 +77,8 @@ def run_training(model_config: ModelConfig,
     sig_finished = callback_wrapper(sig_finished)
     
     set_reproducibility(dataset_config.random_seed)
-        
+
+    model = None
     try:
         loaded_obj = None
         
