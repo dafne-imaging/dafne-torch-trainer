@@ -1,7 +1,10 @@
-import torch 
+import logging
+import torch
 import os
 
 from .base_callback import BaseCallback
+
+logger = logging.getLogger(__name__)
 from typing import Dict, Any
 
 from monai.transforms import Compose, AsDiscrete
@@ -173,8 +176,10 @@ class CheckpointCallback(BaseCallback):
                 best_model_path = os.path.join(save_dir, filename)
                 torch.save(engine.process_function.__self__.model.state_dict(), best_model_path)
                 msg = f'New best {self.monitor}: {current_val:.4f}. Model saved!'
-                if self.on_log: self.on_log(msg)
-                else: print(msg)
+                if self.on_log:
+                    self.on_log(msg)
+                else:
+                    logger.info(msg)
 
 
 class GradualUnfreezeCallback(BaseCallback): 
@@ -197,8 +202,10 @@ class GradualUnfreezeCallback(BaseCallback):
             current_trainable_degree = min(1.0, start_trainable_percent + unfreeze_progress)
             self.task.optimizer = self.unfreeze_fn(self.task.model.model, current_trainable_degree, self.task.optimizer)
             msg = f"Gradual Unfreeze: now {current_trainable_degree*100:.1f}% of the network is trainable"
-            if self.on_log: self.on_log(msg)
-            else: print(msg)
+            if self.on_log:
+                self.on_log(msg)
+            else:
+                logger.info(msg)
 
 
 class EarlyStoppingCallback(BaseCallback):
@@ -222,8 +229,10 @@ class EarlyStoppingCallback(BaseCallback):
             if self.wait_count >= self.patience:
                 engine.state.terminated = True
                 msg = f'Training interrupted because of early stopping after {self.patience} epochs without improvement.'
-                if self.on_log: self.on_log(msg)
-                else: print(msg)
+                if self.on_log:
+                    self.on_log(msg)
+                else:
+                    logger.info(msg)
 
 
 class ClearGPUMemory(BaseCallback):

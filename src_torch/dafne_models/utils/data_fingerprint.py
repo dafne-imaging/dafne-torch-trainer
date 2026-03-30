@@ -1,4 +1,7 @@
+import logging
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class DatasetFingerprint():
@@ -26,8 +29,8 @@ class DatasetFingerprint():
                         spacings.append(res[:2])
             
             except Exception as e:
-                print(f"Warning: Error reading {filepath}: {e}")
-        
+                logger.warning("Error reading %s: %s", filepath, e)
+
         if not spacings:
             raise ValueError("Could not extract any spacing from the dataset list.")
 
@@ -48,10 +51,10 @@ class DatasetFingerprint():
                         shapes.append(shape[:2])
             
             except Exception as e:
-                print(f"Warning: Error reading {filepath}: {e}")
-        
+                logger.warning("Error reading %s: %s", filepath, e)
+
         if not shapes:
-            raise ValueError("Could not extract any spacing from the dataset list.")
+            raise ValueError("Could not extract any shape from the dataset list.")
 
         return np.median(np.array(shapes), axis=0).astype(int)
 
@@ -101,8 +104,8 @@ class DatasetFingerprint():
                 with np.load(filepath, mmap_mode='r') as npz_data:
                     keys = list(npz_data.keys())
                     labels_name.update(k for k in keys if k.startswith('mask'))
-            except Exception:
-                continue
+            except Exception as e:
+                logger.warning("Could not read labels from %s: %s", filepath, e)
 
         return sorted(list(labels_name))
 
@@ -124,7 +127,7 @@ class DatasetFingerprint():
                     voxel_counts[0] += total_voxels - fg_counts.sum()
                     voxel_counts[1:1 + len(fg_counts)] += fg_counts
             except Exception as e:
-                print(f"Warning: skipping {filepath} for class weights: {e}")
+                logger.warning("Skipping %s for class weights: %s", filepath, e)
 
         total = voxel_counts.sum()
         if total == 0:
@@ -150,9 +153,9 @@ class DatasetFingerprint():
                     
                     if n_masks > max_masks_found:
                         max_masks_found = n_masks
-            except Exception:
-                continue
-    
+            except Exception as e:
+                logger.warning("Could not count masks in %s: %s", filepath, e)
+
         total_classes = max(2, max_masks_found + 1)
 
         return total_classes

@@ -1,3 +1,4 @@
+import logging
 import os
 import traceback
 import random as rd
@@ -12,6 +13,21 @@ from monai.losses import DiceCELoss
 from monai.data.utils import pad_list_data_collate
 
 from PyQt5.QtCore import QThread, pyqtSignal
+
+
+class QtSignalHandler(logging.Handler):
+    """Forwards log records to a PyQt5 signal (message, levelname)."""
+
+    def __init__(self, signal):
+        super().__init__()
+        self.signal = signal
+
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            self.signal.emit(msg, record.levelname)
+        except Exception:
+            self.handleError(record)
 
 from .train import run_training
 
@@ -53,6 +69,9 @@ class TrainingWorker(QThread):
 
     # stopped signal
     sig_stopped = pyqtSignal()
+
+    # Log message (text, levelname) forwarded to the GUI log console
+    sig_log = pyqtSignal(str, str)
 
     def __init__(self,
                  dataset_config:DatasetConfig,
@@ -296,16 +315,24 @@ class TrainingWorker(QThread):
         self.is_running = False      
 
     def run(self):
-        run_training(self.model_config, self.dataset_config,
-                     self.inference_metrics,
-                     self.train_config,
-                     self.save_path, 
-                     self.sig_status, 
-                     self.sig_progress,
-                     self._callback_log,
-                     self._callback_check_stop,
-                     self.sig_update_plot,
-                     self.sig_error,
-                     self.sig_stopped,
-                     self.sig_finished,
-                     self.device)
+        handler = QtSignalHandler(self.sig_log)
+        handler.setFormatter(logging.Formatter('%(name)s — %(message)s'))
+        logger = logging.getLogger('dafne_models')
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+        try:
+            run_training(self.model_config, self.dataset_config,
+                         self.inference_metrics,
+                         self.train_config,
+                         self.save_path,
+                         self.sig_status,
+                         self.sig_progress,
+                         self._callback_log,
+                         self._callback_check_stop,
+                         self.sig_update_plot,
+                         self.sig_error,
+                         self.sig_stopped,
+                         self.sig_finished,
+                         self.device)
+        finally:
+            logger.removeHandler(handler)

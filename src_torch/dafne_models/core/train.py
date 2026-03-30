@@ -1,8 +1,10 @@
-import torch 
+import logging
+import torch
 import os
-import traceback
 import random as rd
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from monai.losses import DiceCELoss
@@ -215,7 +217,7 @@ def run_training(model_config: ModelConfig,
                                             save_path)
             sig_status("Model packaged successfully")
         except Exception as e:
-            traceback.print_exc()
+            logger.error("Model packaging failed: %s", e, exc_info=True)
             sig_error(str(e))
 
         if os.path.exists(best_weights_path):
@@ -238,7 +240,7 @@ def run_training(model_config: ModelConfig,
             sig_finished()
 
     except Exception as e:
-        traceback.print_exc()
+        logger.error("Training failed: %s", e, exc_info=True)
         sig_error(str(e))
     finally:
         import gc

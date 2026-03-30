@@ -1,7 +1,10 @@
+import logging
 import numpy as np
-import torch 
+import torch
 
 from monai.data import Dataset, DataLoader
+
+logger = logging.getLogger(__name__)
 from monai.data.utils import pad_list_data_collate
 
 from skimage.transform import resize
@@ -215,8 +218,8 @@ class MapTransformLoadData(MapTransform):
                         "pixdim": np.array([1, *current_res], dtype=np.float32)
                     }
         
-            except Exception as e: 
-                print(f'Error during volume loading: {e}')
+            except Exception as e:
+                logger.error("Error during volume loading: %s", e)
 
         return d
 

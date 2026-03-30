@@ -1,6 +1,9 @@
+import logging
 import os
 import numpy as np
 import torch
+
+logger = logging.getLogger(__name__)
 
 from sklearn.model_selection import train_test_split
 from monai.data.utils import pad_list_data_collate
@@ -112,7 +115,7 @@ class DafneDataModule():
             found_files.sort()
             return found_files
         except Exception as e:
-            print(f"Error scanning directory {root_dir}: {e}")
+            logger.error("Error scanning directory %s: %s", root_dir, e)
             return []
     
     def get_original_data(self):

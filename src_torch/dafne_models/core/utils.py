@@ -1,4 +1,7 @@
+import logging
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def get_median_spacing(data_list:dict, spatial_dims:int=2):
@@ -13,7 +16,7 @@ def get_median_spacing(data_list:dict, spatial_dims:int=2):
                 elif spatial_dims == 2: 
                     pixel_spacing_list.append(curr_res[:2])
         except Exception as e:
-            print(f'error during spacing extraction: {e}')
+            logger.warning("Error during spacing extraction from %s: %s", data, e)
     
     return np.median(pixel_spacing_list, axis=0).tolist()
 

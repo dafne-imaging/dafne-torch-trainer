@@ -1,6 +1,9 @@
+import logging
 import torch.nn as nn
 import torch
 import inspect
+
+logger = logging.getLogger(__name__)
 from .dafne_networks import DafneUnetModel, DafneDynUnetModel
 from ..config.config_params import ModelConfig
 from .lora.lora_models import LoRAModel
@@ -95,7 +98,7 @@ class ModelFactory:
         num_modules = len(trainable_modules)
         num_to_freeze = int(num_modules * degree)
 
-        print(f"Fine-tuning: freezing {num_to_freeze}/{num_modules} parameter blocks ({degree*100:.0f}%)")
+        logger.info("Fine-tuning: freezing %d/%d parameter blocks (%.0f%%)", num_to_freeze, num_modules, degree * 100)
         
         for i, (name, module) in enumerate(trainable_modules):
             is_norm = isinstance(module, (

@@ -12,10 +12,10 @@ from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QScrollArea, QGroupBox, QLabel, QLineEdit,
     QPushButton, QCheckBox, QSpinBox, QDoubleSpinBox,
-    QProgressBar, QSpacerItem, QSizePolicy,
+    QProgressBar, QSpacerItem, QSizePolicy, QPlainTextEdit,
     QFileDialog, QMessageBox, QDialog, QStyleFactory
 )
-from PyQt5.QtGui import QPalette, QColor, QIcon, QPixmap
+from PyQt5.QtGui import QPalette, QColor, QIcon, QPixmap, QFont
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
@@ -215,8 +215,25 @@ class ModelTrainerSplit(QWidget):
         self.progress_Label = QLabel("")
         layout.addWidget(self.progress_Label)
 
-        # ── Spacer ──
-        layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
+        # ── Log console ──
+        log_header = QLabel("Log")
+        log_header.setStyleSheet("font-size: 9pt; color: #555; font-weight: bold; margin-top: 4px;")
+        layout.addWidget(log_header)
+
+        self.log_console = QPlainTextEdit()
+        self.log_console.setReadOnly(True)
+        self.log_console.setFont(QFont("Monospace", 8))
+        self.log_console.setMinimumHeight(100)
+        self.log_console.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.log_console.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background-color: #f5f5f5;"
+            "  color: #555555;"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 3px;"
+            "}"
+        )
+        layout.addWidget(self.log_console)
 
         # ── Action buttons ──
         layout.addLayout(self._action_buttons_row())
@@ -775,12 +792,14 @@ class ModelTrainerSplit(QWidget):
             save_path=self.save_path,
         )
 
+        self.log_console.clear()
         self.worker.sig_update_plot.connect(self.update_plots)
         self.worker.sig_status.connect(self.update_status_label)
         self.worker.sig_progress.connect(self.update_progress_bar)
         self.worker.sig_error.connect(self.handle_error)
         self.worker.sig_finished.connect(self.on_training_finished)
         self.worker.sig_stopped.connect(self.on_training_stopped)
+        self.worker.sig_log.connect(self.append_log)
         self.worker.start()
 
     def stop_training(self):
@@ -805,6 +824,25 @@ class ModelTrainerSplit(QWidget):
 
     def update_status_label(self, message):
         self.progress_Label.setText(message)
+
+    @QtCore.pyqtSlot(str, str)
+    def append_log(self, message: str, level: str = 'INFO'):
+        from datetime import datetime
+        ts = datetime.now().strftime('%H:%M:%S')
+        colors = {
+            'DEBUG':    '#999999',
+            'INFO':     '#555555',
+            'WARNING':  '#b36a00',
+            'ERROR':    '#c0392b',
+            'CRITICAL': '#c0392b',
+        }
+        color = colors.get(level.upper(), '#555555')
+        html = (
+            f"<span style='color:#aaaaaa;'>[{ts}]</span> "
+            f"<span style='color:{color}; font-weight:bold;'>{level}</span> "
+            f"<span style='color:{color};'>— {message}</span>"
+        )
+        self.log_console.appendHtml(html)
 
     def restore_image_contrast(self, img):
         img_vis = img.copy()

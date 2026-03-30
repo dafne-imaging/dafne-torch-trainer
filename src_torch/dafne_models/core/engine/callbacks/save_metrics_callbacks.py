@@ -1,6 +1,9 @@
-import torch 
+import logging
+import torch
 import os
 import csv
+
+logger = logging.getLogger(__name__)
 from torch.utils.tensorboard import SummaryWriter
 
 from .base_callback import BaseCallback
@@ -58,7 +61,7 @@ class CSVLoggingCallback(BaseCallback):
                             row.extend([""] * len(self.labels_name))
                     writer.writerow(row)
 
-            print(f"CSV report saved in: {self.csv_path}")
+            logger.info("CSV report saved in: %s", self.csv_path)
 
 
 class TensorboardCallback(BaseCallback):
