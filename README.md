@@ -27,7 +27,13 @@ Requires Python >= 3.9. A CUDA-capable GPU is strongly recommended for training.
 
 ## Input data format
 
-Training data must be NIfTI files (`.nii` or `.nii.gz`) organized as image/mask pairs. Masks are binary volumes where each file represents one region of interest. The data folder structure expected by the data loader is configured via the GUI or the CLI config.
+Training data must be `.npz` files, each containing:
+
+- `data`: the image volume (numpy array)
+- `mask_<label>`: one binary mask per anatomical structure (e.g. `mask_muscle`, `mask_femur`)
+- `resolution`: voxel spacing array
+
+The data folder is scanned recursively. All `.npz` files found are split into train and validation sets automatically.
 
 ## Output
 
@@ -150,5 +156,4 @@ dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.mo
 
 ## Notes
 
-- Spurious/legacy files still present but unused: `core/pytorch_loop.py`, `core/training_worker.py`, `core/utils.py`, `ui/ModelTrainer.py`, `ui/ModelTrainer_Ui.py`. These can be removed.
-- The `build/` directory at the repo root can also be removed.
+- The `build/` directory at the repo root can be removed.
