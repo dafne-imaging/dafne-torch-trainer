@@ -30,7 +30,13 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
         'train_metadata': train_metadata,
         'dependencies': {
             'dafne_inference': 'dafne-monai-inference>=0.1.0'
-        }
+        },
+        # Dafne metadata fields
+        'model_name':     net_metadata.get('model_name', ''),
+        'model_type':     'DynamicTorchModel',
+        'dimensionality': str(net_metadata.get('spatial_dims', 3)),
+        'categories':     net_metadata.get('labels_name') or [],
+        'variants':       [''],
     }
 
     clean_params = {}
