@@ -61,7 +61,7 @@ class CSVLoggingCallback(BaseCallback):
                             row.extend([""] * len(self.labels_name))
                     writer.writerow(row)
 
-            logger.info("CSV report saved in: %s", self.csv_path)
+            logger.info("Model metrics saved successfully")
 
 
 class TensorboardCallback(BaseCallback):

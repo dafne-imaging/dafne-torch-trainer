@@ -841,7 +841,11 @@ class ModelTrainerSplit(QWidget):
             f"<span style='color:{color}; font-weight:bold;'>{level}</span> "
             f"<span style='color:{color};'>— {message}</span>"
         )
+        scrollbar = self.log_console.verticalScrollBar()
+        at_bottom = scrollbar.value() >= scrollbar.maximum() - 4
         self.log_console.appendHtml(html)
+        if at_bottom:
+            scrollbar.setValue(scrollbar.maximum())
 
     def restore_image_contrast(self, img):
         img_vis = img.copy()
@@ -954,6 +958,7 @@ class ModelTrainerSplit(QWidget):
         self.progressBar.setValue(100)
         self.progress_Label.setText('Training completed!')
         self._clear_paths_and_data()
+        self.log_console.clear()
         QMessageBox.information(self, 'Finished!', "The model was trained successfully")
 
     def _reset_ui_state(self):
