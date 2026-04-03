@@ -1,6 +1,7 @@
 import logging
 import torch
 import os
+import numpy as np
 
 from .base_callback import BaseCallback
 
@@ -253,4 +254,51 @@ class ClearGPUMemory(BaseCallback):
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-                
+
+
+class ContinualLearningCallback(BaseCallback): 
+    '''
+        Save matrix theta_{A_i}* at the end of original training 
+    '''
+
+    def __init__(self, val_loader, device, save_path, lambda_reg, criterion): 
+        self.val_loader = val_loader
+        self.criterion = criterion
+        self.device = device
+        self.save_path = save_path
+        self.lambda_reg = lambda_reg
+
+    def on_completed(self, engine):
+        self.model = engine.process_function.__self__.model
+        self.model.eval()
+
+        fisher = {name:torch.zeros_like(param) for name, param in \
+                  self.model.named_parameters() if param.requires_grad}
+
+        params_snapshot = {name: param.clone() for name, param in \
+                        self.model.state_dict().items()}
+        
+        n_batches = 0
+        for batch in self.val_loader: 
+            inputs = batch['image'].to(self.device)
+            target = batch['mask'].long().to(self.device)
+            
+            self.model.zero_grad()
+
+            outputs = self.model(inputs)
+            loss = self.criterion(outputs, target)
+            loss.backward()
+
+            for name, param in self.model.named_parameters():
+                if param.requires_grad and param.grad is not None: 
+                    fisher[name] += param.grad.detach() ** 2
+
+            n_batches += 1
+
+        for name in fisher: 
+            fisher[name] /= n_batches
+        
+        torch.save({
+            'fisher': fisher,
+            'params_snapshot': params_snapshot
+        }, os.path.join(os.path.dirname(self.save_path), '_ewc.pt'))

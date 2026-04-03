@@ -188,7 +188,8 @@ def run_training(model_config: ModelConfig,
             early_stopping=train_config.early_stopping,
             initial_freeze_degree=model_config.percent_to_freeze \
                 if model_config.percent_to_freeze is not None else 0.0,
-            on_log=_callback_log
+            on_log=_callback_log,
+            continual_learning=False #to check from GUI if continual learning is checked
         )
 
         def on_epoch_progress(engine):

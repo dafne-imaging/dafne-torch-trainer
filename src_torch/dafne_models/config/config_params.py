@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+import numpy as np
 from typing import List, Optional
 
 @dataclass
@@ -68,7 +69,6 @@ class ModelConfig:
         if self.percent_to_freeze is not None and not 0 <= self.percent_to_freeze <= 1:
             raise ValueError(f"percent_to_freeze must be in [0, 1], received: {self.percent_to_freeze}")
 
-
 @dataclass
 class AugmentationConfig:
     rotate: bool = False
@@ -101,6 +101,14 @@ class TrainingConfig:
         if self.learning_rate <= 0:
             raise ValueError(f"learning_rate must be > 0, received: {self.learning_rate}")
 
+
+@dataclass
+class EWCSnapshotConfig:
+    '''
+        Configuration class for EWC continual learning
+    '''
+    theta: np.array = None
+    
 
 @dataclass
 class InferenceMetricsConfig:

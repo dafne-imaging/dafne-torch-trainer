@@ -2,13 +2,15 @@ import torch
 from .events import EngineEvents
 from .trainer_engine import Engine
 from .tasks.supervised_task import SupervisedModelTask
+from .tasks.continual_learning_task import ContinualLearningTask
 from .callbacks.callbacks import (
     MetricsCallback,
     CheckpointCallback,
     EarlyStoppingCallback,
     VisualizationCallback,
     GradualUnfreezeCallback,
-    ClearGPUMemory
+    ClearGPUMemory,
+    ContinualLearningCallback
 )
 from .callbacks.save_metrics_callbacks import (
     CSVLoggingCallback,
@@ -32,18 +34,30 @@ def create_supervised_trainer(
                         unfreeze_fn=None,
                         early_stopping:bool=True,
                         initial_freeze_degree=0.0,
-                        on_log=None
+                        on_log=None,
+                        continual_learning: bool = False
                     ):
 
-    task = SupervisedModelTask(
-        model,
-        criterion,
-        optimizer,
-        device,
-        spatial_dims,
-        val_roi_size,
-        mixed_precision
-    )
+    if not continual_learning:
+        task = SupervisedModelTask(
+            model,
+            criterion,
+            optimizer,
+            device,
+            spatial_dims,
+            val_roi_size,
+            mixed_precision
+        )
+    else: 
+        task = ContinualLearningTask(
+            model,
+            criterion,
+            optimizer,
+            device,
+            spatial_dims,
+            val_roi_size,
+            save_path=save_path
+        )
 
     trainer = Engine(task.train_step)
     evaluator = Engine(task.validation_step)
@@ -58,8 +72,16 @@ def create_supervised_trainer(
     checkpoint_cb = CheckpointCallback(save_path, model_name, monitor='avg_dice', on_log=on_log)
     csv_cb = CSVLoggingCallback(save_path, labels_name=labels_name)
     tb_cb = TensorboardCallback(save_path=save_path)
-    grad_unfreeze = GradualUnfreezeCallback(initial_freeze_degree=initial_freeze_degree, unfreeze_fn=unfreeze_fn, task=task, on_log=on_log)
+    grad_unfreeze = GradualUnfreezeCallback(initial_freeze_degree=initial_freeze_degree, 
+                                            unfreeze_fn=unfreeze_fn, 
+                                            task=task, 
+                                            on_log=on_log)
     gpu_cleanup_cb = ClearGPUMemory()
+    cont_learn_cb = ContinualLearningCallback(val_loader=val_loader, 
+                                              device=device, 
+                                              save_path=save_path, 
+                                              lambda_reg=1.0, 
+                                              criterion=criterion)
 
     if early_stopping:
         early_stop_cb = EarlyStoppingCallback(patience=20, monitor='avg_dice', on_log=on_log)
@@ -92,6 +114,8 @@ def create_supervised_trainer(
     trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, vis_cb.on_epoch_completed)
     trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, tb_cb.on_epoch_completed)
     trainer.add_event_handler(EngineEvents.COMPLETED, tb_cb.on_completed)
+    trainer.add_event_handler(EngineEvents.COMPLETED, cont_learn_cb.on_completed)
+
     if early_stopping:
         trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, early_stop_cb.on_epoch_completed)
 
@@ -112,4 +136,3 @@ def create_supervised_trainer(
     trainer.add_event_handler(EngineEvents.COMPLETED, on_completed)
 
     return trainer
-
