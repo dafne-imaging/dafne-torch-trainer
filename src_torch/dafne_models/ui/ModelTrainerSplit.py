@@ -99,7 +99,8 @@ class ModelTrainerSplit(QWidget):
         self.adaptation_params = {
             'mode': 'scratch', 'freeze_degree': 0.5,
             'gradual_unfreeze': False,
-            'lora_rank': 8, 'lora_alpha': 16
+            'lora_rank': 8, 'lora_alpha': 16,
+            'lambda_reg': 1.0
         }
         self.loss_history = []
         self.val_loss_history = []
@@ -675,7 +676,7 @@ class ModelTrainerSplit(QWidget):
 
     def _update_advanced_ui_state(self):
         mode = self.adaptation_params.get('mode', 'scratch')
-        locked = mode in ('finetune', 'lora')
+        locked = mode in ('finetune', 'lora', 'continual')
         self.advanced_widget.setEnabled(not locked)
         self.advanced_button.setEnabled(not locked)
         self.check_auto_params.setEnabled(not locked)
@@ -751,7 +752,7 @@ class ModelTrainerSplit(QWidget):
             return
 
         mode = self.adaptation_params.get('mode', 'scratch')
-        if mode in ('finetune', 'lora') and not self.pretrained_path:
+        if mode in ('finetune', 'lora', 'continual') and not self.pretrained_path:
             QMessageBox.warning(self, 'Input Error',
                                 "No pretrained model selected. Please select a pretrained model")
             return

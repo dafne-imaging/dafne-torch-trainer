@@ -93,6 +93,9 @@ class TrainingConfig:
     early_stopping: bool = False
     scheduler: bool = False
 
+    continual_learning: bool = False
+    lambda_reg: float = 1.0 # if continual_learning
+
     def __post_init__(self):
         if self.epochs <= 0:
             raise ValueError(f"epochs must be > 0, received: {self.epochs}")

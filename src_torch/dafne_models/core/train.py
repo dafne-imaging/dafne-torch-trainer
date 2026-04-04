@@ -114,6 +114,12 @@ def run_training(model_config: ModelConfig,
             model_config.extra_params['strides'] = net_params.get('strides', None)
         
             data_builder = TransformBuilderFineTuning(model_config, train_config)
+
+            if train_config.continual_learning:
+                ewc_path = os.path.join(os.path.dirname(save_path), '_ewc.pt')
+                if not os.path.exists(ewc_path):
+                    sig_error("Continual learning selected but no _ewc.pt file found. Run a prior training first.")
+                    return
         else:
             sig_status("Training from scratch mode")
             model_config.median_shape = data_fingerprint.data_shape.tolist()
@@ -189,7 +195,8 @@ def run_training(model_config: ModelConfig,
             initial_freeze_degree=model_config.percent_to_freeze \
                 if model_config.percent_to_freeze is not None else 0.0,
             on_log=_callback_log,
-            continual_learning=False #to check from GUI if continual learning is checked
+            continual_learning=train_config.continual_learning,
+            lambda_reg=train_config.lambda_reg
         )
 
         def on_epoch_progress(engine):

@@ -12,7 +12,7 @@ class FineTuningDialog(QDialog):
     def __init__(self, parent=None, current_settings=None):
         super().__init__(parent)
         self.setWindowTitle("Training Strategy")
-        self.setFixedSize(420, 240)
+        self.setFixedSize(420, 260)
 
         if not current_settings:
             current_settings = {
@@ -41,6 +41,7 @@ class FineTuningDialog(QDialog):
         self.mode_combo.addItem("Train from scratch", "scratch")
         self.mode_combo.addItem("Classic fine-tuning (layer freezing)", "finetune")
         self.mode_combo.addItem("LoRA (low-rank adaptation)", "lora")
+        self.mode_combo.addItem("Continual Learning (EWC)", "continual")
 
         selector_row.addWidget(lbl)
         selector_row.addWidget(self.mode_combo)
@@ -117,6 +118,28 @@ class FineTuningDialog(QDialog):
         ll.addRow("", lora_note)
         self.stacked_widget.addWidget(page_lora)
 
+        # Page 3: Continual Learning
+        page_continual = QWidget()
+        cl = QFormLayout(page_continual)
+        cl.setContentsMargins(8, 10, 8, 4)
+        cl.setSpacing(10)
+        cl.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        self.lambda_reg_spin = QDoubleSpinBox()
+        self.lambda_reg_spin.setRange(0.01, 100.0)
+        self.lambda_reg_spin.setSingleStep(0.1)
+        self.lambda_reg_spin.setDecimals(2)
+        self.lambda_reg_spin.setValue(current_settings.get('lambda_reg', 1.0))
+        self.lambda_reg_spin.setToolTip("Weight of the EWC penalty term (higher = more plasticity constraint)")
+        self.lambda_reg_spin.setFixedWidth(80)
+
+        ewc_note = QLabel("Requires a prior training in the same output directory.")
+        ewc_note.setWordWrap(True)
+
+        cl.addRow("Lambda (λ):", self.lambda_reg_spin)
+        cl.addRow("", ewc_note)
+        self.stacked_widget.addWidget(page_continual)
+
         root.addWidget(self.stacked_widget)
 
         # ── OK / Cancel ───────────────────────────────────────────────
@@ -139,5 +162,6 @@ class FineTuningDialog(QDialog):
             'freeze_degree': self.freeze_spin.value(),
             'gradual_unfreeze': self.gradual_unfreeze_check.isChecked(),
             'lora_rank': self.rank_spin.value(),
-            'lora_alpha': self.alpha_spin.value()
+            'lora_alpha': self.alpha_spin.value(),
+            'lambda_reg': self.lambda_reg_spin.value()
         }

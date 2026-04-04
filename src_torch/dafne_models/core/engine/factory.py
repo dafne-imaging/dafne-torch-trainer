@@ -35,7 +35,8 @@ def create_supervised_trainer(
                         early_stopping:bool=True,
                         initial_freeze_degree=0.0,
                         on_log=None,
-                        continual_learning: bool = False
+                        continual_learning: bool = False,
+                        lambda_reg: float = 1.0
                     ):
 
     if not continual_learning:
@@ -56,7 +57,9 @@ def create_supervised_trainer(
             device,
             spatial_dims,
             val_roi_size,
-            save_path=save_path
+            mixed_precision=mixed_precision,
+            save_path=save_path,
+            lambda_reg=lambda_reg
         )
 
     trainer = Engine(task.train_step)
@@ -77,10 +80,10 @@ def create_supervised_trainer(
                                             task=task, 
                                             on_log=on_log)
     gpu_cleanup_cb = ClearGPUMemory()
-    cont_learn_cb = ContinualLearningCallback(val_loader=val_loader, 
-                                              device=device, 
-                                              save_path=save_path, 
-                                              lambda_reg=1.0, 
+    cont_learn_cb = ContinualLearningCallback(val_loader=val_loader,
+                                              device=device,
+                                              save_path=save_path,
+                                              lambda_reg=lambda_reg,
                                               criterion=criterion)
 
     if early_stopping:
