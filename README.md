@@ -37,14 +37,27 @@ The data folder is scanned recursively. All `.npz` files found are split into tr
 
 ## Output
 
-Training produces a `.model` file (serialized via `dafne-dl`'s `DynamicTorchModel`). The file embeds:
+All files produced by a training run are saved inside a dedicated folder named after the model, created automatically under the output directory. For example, given `--output /models/mymodel.model`, the following structure is created:
+
+```
+/models/mymodel/
+    mymodel.model          # final serialized model (DynamicTorchModel format)
+    mymodel_best_model.pth # best checkpoint by validation Dice (removed after packaging)
+    mymodel.csv            # per-epoch metrics log
+    _ewc.pt                # EWC snapshot (Fisher matrix + parameter snapshot, always saved)
+    logs/
+        train/             # TensorBoard training logs
+        val/               # TensorBoard validation logs
+```
+
+The `.model` file embeds:
 
 - model weights
 - network architecture metadata (model name, spatial dims, patch size, spacing, etc.)
 - training metadata
 - a dependency hint pointing to `dafne-monai-inference` for inference-time use
 
-A `_best_model.pth` checkpoint is saved during training and removed after the final `.model` is packaged.
+The `_ewc.pt` file is saved at the end of every training run regardless of mode. It is required when running a subsequent continual learning session on the same output directory.
 
 ## Project structure
 
@@ -68,10 +81,12 @@ src_torch/dafne_models/
             state.py            # Engine state dataclass
             events.py           # Engine event enum
             tasks/
-                supervised_task.py  # Forward pass, loss, optimizer step
+                supervised_task.py          # Forward pass, loss, optimizer step
+                continual_learning_task.py  # EWC-regularized train step
             callbacks/
                 callbacks.py        # MetricsCallback, CheckpointCallback, EarlyStoppingCallback,
-                                    # VisualizationCallback, GradualUnfreezeCallback, ClearGPUMemory
+                                    # VisualizationCallback, GradualUnfreezeCallback, ClearGPUMemory,
+                                    # ContinualLearningCallback (FIM + theta* computation)
                 save_metrics_callbacks.py  # TensorBoard and CSV logging
     models/
         dafne_networks.py   # Network architecture definitions
@@ -130,11 +145,12 @@ dafne_train --data <data_dir> --output <output_path> --pretrained <model_path> -
 | Argument | Default | Description |
 |---|---|---|
 | `--pretrained` | none | Path to a pretrained `.model` file |
-| `--mode` | `scratch` | Training mode: `scratch`, `finetune`, or `lora` |
+| `--mode` | `scratch` | Training mode: `scratch`, `finetune`, `lora`, or `continual` |
 | `--freeze-degree` | 0.5 | Fraction of layers to freeze (used with `--mode finetune`) |
 | `--gradual-unfreeze` | off | Gradually unfreeze frozen layers during training |
 | `--lora-rank` | 8 | LoRA rank (used with `--mode lora`) |
 | `--lora-alpha` | 16 | LoRA alpha scaling factor (used with `--mode lora`) |
+| `--lambda-reg` | 1.0 | EWC regularization weight (used with `--mode continual`) |
 
 Example — fine-tuning with 70% of layers frozen:
 ```
@@ -148,11 +164,20 @@ dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.mo
     --mode lora --lora-rank 8 --lora-alpha 16 --epochs 30
 ```
 
+Example — continual learning with EWC:
+```
+dafne_train -d /data/task_b -o /models/mymodel/mymodel.model --pretrained /models/mymodel/mymodel.model \
+    --mode continual --lambda-reg 1.0 --epochs 30
+```
+
+> The output directory must already contain a `_ewc.pt` file produced by a prior training run on the same path.
+
 ## Training modes
 
 - **From scratch** (`--mode scratch`): network architecture and preprocessing are derived automatically from dataset statistics (median spacing, median shape, label count).
 - **Fine-tuning** (`--mode finetune`): loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing and gradual unfreezing.
 - **LoRA** (`--mode lora`): injects low-rank adapter layers into the frozen base model. Only adapter weights are trained. Useful for adaptation with very little data.
+- **Continual learning** (`--mode continual`): fine-tunes on a new task while penalizing changes to weights that were important for the previous task, using Elastic Weight Consolidation (EWC). The penalty is `λ * Σ F_i * (θ_i - θ*_i)²`, where `F` is the diagonal Fisher Information Matrix and `θ*` are the weights from the prior training run. Both are loaded from `_ewc.pt`.
 
 ## Notes
 
