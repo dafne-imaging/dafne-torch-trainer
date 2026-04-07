@@ -829,19 +829,21 @@ class ModelTrainerSplit(QWidget):
     def append_log(self, message: str, level: str = 'INFO'):
         from datetime import datetime
         ts = datetime.now().strftime('%H:%M:%S')
-        colors = {
-            'DEBUG':    '#999999',
-            'INFO':     '#555555',
-            'WARNING':  '#b36a00',
-            'ERROR':    '#c0392b',
-            'CRITICAL': '#c0392b',
-        }
-        color = colors.get(level.upper(), '#555555')
-        html = (
-            f"<span style='color:#aaaaaa;'>[{ts}]</span> "
-            f"<span style='color:{color}; font-weight:bold;'>{level}</span> "
-            f"<span style='color:{color};'>— {message}</span>"
-        )
+        lvl = level.upper()
+        if lvl in ('WARNING', 'ERROR', 'CRITICAL'):
+            colors = {'WARNING': '#b36a00', 'ERROR': '#c0392b', 'CRITICAL': '#c0392b'}
+            color = colors[lvl]
+            html = (
+                f"<span style='color:#aaaaaa;'>[{ts}]</span> "
+                f"<span style='color:{color}; font-weight:bold;'>{lvl}</span> "
+                f"<span style='color:{color};'>— {message}</span>"
+            )
+        else:
+            color = '#999999' if lvl == 'DEBUG' else '#555555'
+            html = (
+                f"<span style='color:#aaaaaa;'>[{ts}]</span> "
+                f"<span style='color:{color};'>{message}</span>"
+            )
         scrollbar = self.log_console.verticalScrollBar()
         at_bottom = scrollbar.value() >= scrollbar.maximum() - 4
         self.log_console.appendHtml(html)
