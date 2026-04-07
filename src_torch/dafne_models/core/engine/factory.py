@@ -84,7 +84,9 @@ def create_supervised_trainer(
                                               device=device,
                                               save_path=save_path,
                                               lambda_reg=lambda_reg,
-                                              criterion=criterion)
+                                              criterion=criterion,
+                                              spatial_dims=spatial_dims,
+                                              val_roi_size=val_roi_size)
 
     if early_stopping:
         early_stop_cb = EarlyStoppingCallback(patience=20, monitor='avg_dice', on_log=on_log)

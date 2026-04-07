@@ -261,14 +261,18 @@ class ContinualLearningCallback(BaseCallback):
         Save matrix theta_{A_i}* at the end of original training 
     '''
 
-    def __init__(self, val_loader, device, save_path, lambda_reg, criterion): 
+    def __init__(self, val_loader, device, save_path, lambda_reg, criterion,
+                 spatial_dims=2, val_roi_size=None):
         self.val_loader = val_loader
         self.criterion = criterion
         self.device = device
         self.save_path = save_path
         self.lambda_reg = lambda_reg
+        self.spatial_dims = spatial_dims
+        self.val_roi_size = val_roi_size
 
     def on_completed(self, engine):
+        from monai.inferers import sliding_window_inference
         self.model = engine.process_function.__self__.model
         self.model.eval()
 
@@ -277,15 +281,24 @@ class ContinualLearningCallback(BaseCallback):
 
         params_snapshot = {name: param.clone() for name, param in \
                         self.model.state_dict().items()}
-        
+
         n_batches = 0
-        for batch in self.val_loader: 
+        for batch in self.val_loader:
             inputs = batch['image'].to(self.device)
             target = batch['mask'].long().to(self.device)
-            
+
             self.model.zero_grad()
 
-            outputs = self.model(inputs)
+            if self.spatial_dims == 3 and self.val_roi_size is not None:
+                outputs = sliding_window_inference(
+                    inputs=inputs,
+                    roi_size=self.val_roi_size,
+                    sw_batch_size=4,
+                    overlap=0.25,
+                    predictor=self.model
+                )
+            else:
+                outputs = self.model(inputs)
             loss = self.criterion(outputs, target)
             loss.backward()
 
