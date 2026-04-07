@@ -36,7 +36,8 @@ def create_supervised_trainer(
                         initial_freeze_degree=0.0,
                         on_log=None,
                         continual_learning: bool = False,
-                        lambda_reg: float = 1.0
+                        lambda_reg: float = 1.0,
+                        ewc_path: str = None
                     ):
 
     if not continual_learning:
@@ -58,7 +59,7 @@ def create_supervised_trainer(
             spatial_dims,
             val_roi_size,
             mixed_precision=mixed_precision,
-            save_path=save_path,
+            ewc_path=ewc_path,
             lambda_reg=lambda_reg
         )
 

@@ -14,12 +14,12 @@ class ContinualLearningTask(SupervisedModelTask):
 
     def __init__(self, model,
                  criterion,
-                 optimizer, 
+                 optimizer,
                  device,
                  spatial_dims: int,
                  val_roi_size: tuple,
                  mixed_precision: bool = False,
-                 save_path: str = None,
+                 ewc_path: str = None,
                  lambda_reg: float = 1.0,
                  ):
 
@@ -27,13 +27,13 @@ class ContinualLearningTask(SupervisedModelTask):
                          criterion=criterion,
                          optimizer=optimizer,
                          device=device,
-                         spatial_dims=spatial_dims, 
+                         spatial_dims=spatial_dims,
                          val_roi_size=val_roi_size,
                          mixed_precision=mixed_precision)
-        
+
         self.model = model
         self.lambda_reg = lambda_reg
-        self.ewc_params = torch.load(os.path.join(os.path.dirname(save_path), '_ewc.pt'), weights_only=True)
+        self.ewc_params = torch.load(ewc_path, weights_only=True)
 
     def train_step(self, engine, batch):
         self.model.train() #pre-trained model
