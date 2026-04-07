@@ -78,6 +78,12 @@ def run_training(model_config: ModelConfig,
     
     set_reproducibility(dataset_config.random_seed)
 
+    if save_path:
+        model_name = os.path.basename(save_path).split('.')[0]
+        model_dir = os.path.join(os.path.dirname(save_path), model_name)
+        os.makedirs(model_dir, exist_ok=True)
+        save_path = os.path.join(model_dir, os.path.basename(save_path))
+
     model = None
     try:
         loaded_obj = None

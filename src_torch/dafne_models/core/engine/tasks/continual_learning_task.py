@@ -1,8 +1,7 @@
 from .supervised_task import SupervisedModelTask
 
-import torch 
-import os 
-import numpy as np
+import torch
+import os
 
 def compute_ewc_loss(model, fisher, params_snapshot, lambda_reg):
     ewc_loss = 0.0
@@ -34,7 +33,7 @@ class ContinualLearningTask(SupervisedModelTask):
         
         self.model = model
         self.lambda_reg = lambda_reg
-        self.ewc_params = torch.load(os.path.join(os.path.dirname(save_path), '_ewc.pt'))
+        self.ewc_params = torch.load(os.path.join(os.path.dirname(save_path), '_ewc.pt'), weights_only=True)
 
     def train_step(self, engine, batch):
         self.model.train() #pre-trained model
