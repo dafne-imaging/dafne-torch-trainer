@@ -99,12 +99,6 @@ def build_training_configs(
             rank_for='channels',
             target_modules=['.*'],
         )
-    elif mode == 'continual': #continual learning with ewc loss
-        model_config.fine_tuning = True
-        model_config.percent_to_freeze = None
-        model_config.lora_config = None
-        train_config.continual_learning = True
-        train_config.lambda_reg = adaptation_params.get('lambda_reg', 1.0)
     else:  # scratch
         model_config.fine_tuning = False
         model_config.percent_to_freeze = None

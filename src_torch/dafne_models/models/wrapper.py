@@ -10,6 +10,7 @@ class DafneModelWrapper(nn.Module):
     def __init__(self, core_model: nn.Module):
         super().__init__()
         self.model = core_model
+        self.ewc_data = None
 
     def forward(self, x):
         output = self.model(x)
@@ -66,4 +67,5 @@ class DafneModelWrapper(nn.Module):
         with open(save_path, 'wb') as f:
             create_dynamic_model(weights=self.get_state_dict(), 
                                 net_metadata=net_metadata, 
-                                train_metadata=train_metadata).dump(f)
+                                train_metadata=train_metadata,
+                                ewc_data=self.ewc_data).dump(f)

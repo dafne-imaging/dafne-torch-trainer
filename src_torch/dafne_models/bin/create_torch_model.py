@@ -15,14 +15,19 @@ def apply_network_inf(model_obj, data_dict: dict) -> dict:
     from dafne_inference.inference import run_inference
     return run_inference(model_obj, data_dict)
 
+def incremental_learn_function(incremental_data: list):
+    #from dafne_inference.incremental import run_incremental
+    return
 
-def create_dynamic_model(weights, net_metadata, train_metadata):
+
+def create_dynamic_model(weights, net_metadata, train_metadata, ewc_data):
     '''
     Create dynamic model
     
     :param weights: Model weights
     :param net_metadata: Model metadata
     :param train_metadata: Training metadata
+    :param ewc_data: EWC params from current model
     '''
 
     metadata = {
@@ -31,6 +36,7 @@ def create_dynamic_model(weights, net_metadata, train_metadata):
         'dependencies': {
             'dafne_inference': 'dafne-monai-inference>=0.1.0'
         },
+        'ewc_data': ewc_data,
         # Dafne metadata fields
         'model_name':     net_metadata.get('model_name', ''),
         'model_type':     'DynamicTorchModel',

@@ -121,14 +121,6 @@ def run_training(model_config: ModelConfig,
         
             data_builder = TransformBuilderFineTuning(model_config, train_config)
 
-            if train_config.continual_learning:
-                pretrained_dir = os.path.dirname(train_config.pretrained_model_path)
-                pretrained_name = os.path.basename(str(train_config.pretrained_model_path)).split('.')[0]
-                ewc_path = os.path.join(pretrained_dir, f'{pretrained_name}_ewc.pt')
-                if not os.path.exists(ewc_path):
-                    sig_error(f"Continual learning selected but no EWC file found: {ewc_path}. Run a prior training first.")
-                    return
-                train_config.ewc_path = ewc_path
         else:
             sig_status("Training from scratch mode")
             model_config.median_shape = data_fingerprint.data_shape.tolist()
@@ -204,9 +196,6 @@ def run_training(model_config: ModelConfig,
             initial_freeze_degree=model_config.percent_to_freeze \
                 if model_config.percent_to_freeze is not None else 0.0,
             on_log=_callback_log,
-            continual_learning=train_config.continual_learning,
-            lambda_reg=train_config.lambda_reg,
-            ewc_path=train_config.ewc_path
         )
 
         def on_epoch_progress(engine):

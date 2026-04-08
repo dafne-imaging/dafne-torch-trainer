@@ -2,7 +2,6 @@ import torch
 from .events import EngineEvents
 from .trainer_engine import Engine
 from .tasks.supervised_task import SupervisedModelTask
-from .tasks.continual_learning_task import ContinualLearningTask
 from .callbacks.callbacks import (
     MetricsCallback,
     CheckpointCallback,
@@ -35,33 +34,17 @@ def create_supervised_trainer(
                         early_stopping:bool=True,
                         initial_freeze_degree=0.0,
                         on_log=None,
-                        continual_learning: bool = False,
-                        lambda_reg: float = 1.0,
-                        ewc_path: str = None
                     ):
 
-    if not continual_learning:
-        task = SupervisedModelTask(
-            model,
-            criterion,
-            optimizer,
-            device,
-            spatial_dims,
-            val_roi_size,
-            mixed_precision
-        )
-    else: 
-        task = ContinualLearningTask(
-            model,
-            criterion,
-            optimizer,
-            device,
-            spatial_dims,
-            val_roi_size,
-            mixed_precision=mixed_precision,
-            ewc_path=ewc_path,
-            lambda_reg=lambda_reg
-        )
+    task = SupervisedModelTask(
+        model,
+        criterion,
+        optimizer,
+        device,
+        spatial_dims,
+        val_roi_size,
+        mixed_precision
+    )
 
     trainer = Engine(task.train_step)
     evaluator = Engine(task.validation_step)

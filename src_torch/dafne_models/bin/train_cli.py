@@ -12,7 +12,7 @@ def main():
     parser.add_argument('--epochs', default=50, type=int, help='Number of epochs')
     parser.add_argument('--batch-size', dest='batch_size', default=2, type=int, help='Batch size')
     parser.add_argument('--lr', default=0.001, type=float, help='Learning rate')
-    parser.add_argument('--mode', default='scratch', choices=['scratch', 'finetune', 'lora', 'continual'], help='Training mode')
+    parser.add_argument('--mode', default='scratch', choices=['scratch', 'finetune', 'lora'], help='Training mode')
     parser.add_argument('--3d', dest='is_3d', action='store_true', help='Train a 3D model')
     parser.add_argument('--dynunet', action='store_true', help='Use Dynamic U-Net (auto params)')
     parser.add_argument('--early-stopping', dest='early_stopping', action='store_true', help='Enable early stopping')
@@ -23,7 +23,6 @@ def main():
     parser.add_argument('--conv-layers', dest='conv_layers', default=2, type=int, help='Number of convolutional layers per level')
     parser.add_argument('--lora-rank', dest='lora_rank', default=8, type=int, help='LoRA rank (used with --mode lora)')
     parser.add_argument('--lora-alpha', dest='lora_alpha', default=16, type=int, help='LoRA alpha (used with --mode lora)')
-    parser.add_argument('--lambda-reg', dest='lambda_reg', default=1.0, type=float, help='Lambda regularization for EWC loss (used with --mode continual)')
     parser.add_argument('--freeze-degree', dest='freeze_degree', default=0.5, type=float, help='Fraction of layers to freeze (used with --mode finetune)')
     parser.add_argument('--gradual-unfreeze', dest='gradual_unfreeze', action='store_true', help='Enable gradual unfreezing (used with --mode finetune)')
 
@@ -40,7 +39,6 @@ def main():
         'gradual_unfreeze': args.gradual_unfreeze,
         'lora_rank': args.lora_rank,
         'lora_alpha': args.lora_alpha,
-        'lambda_reg': args.lambda_reg,
     }
 
     configs = build_training_configs(

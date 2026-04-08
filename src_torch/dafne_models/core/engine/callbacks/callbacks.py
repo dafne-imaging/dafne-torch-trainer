@@ -317,3 +317,8 @@ class ContinualLearningCallback(BaseCallback):
             'fisher': fisher,
             'params_snapshot': params_snapshot
         }, ewc_path)
+        ewc_cpu = {
+            'fisher': {k: v.cpu().numpy() for k, v in fisher.items()},
+            'params_snapshot': {k: v.cpu().numpy() for k, v in params_snapshot.items()}
+        }
+        self.model.ewc_data = ewc_cpu
