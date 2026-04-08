@@ -311,12 +311,6 @@ class ContinualLearningCallback(BaseCallback):
         for name in fisher: 
             fisher[name] /= n_batches
         
-        model_name = os.path.basename(self.save_path).split('.')[0]
-        ewc_path = os.path.join(os.path.dirname(self.save_path), f'{model_name}_ewc.pt')
-        torch.save({
-            'fisher': fisher,
-            'params_snapshot': params_snapshot
-        }, ewc_path)
         ewc_cpu = {
             'fisher': {k: v.cpu().numpy() for k, v in fisher.items()},
             'params_snapshot': {k: v.cpu().numpy() for k, v in params_snapshot.items()}

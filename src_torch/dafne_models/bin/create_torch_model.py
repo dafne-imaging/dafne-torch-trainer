@@ -15,10 +15,9 @@ def apply_network_inf(model_obj, data_dict: dict) -> dict:
     from dafne_inference.inference import run_inference
     return run_inference(model_obj, data_dict)
 
-def incremental_learn_function(incremental_data: list):
-    #from dafne_inference.incremental import run_incremental
-    return
-
+def incremental_learn_function(model_obj, trainingData, trainingOutputs):
+    from dafne_inference.incremental import run_incremental_learning
+    return run_incremental_learning(model_obj, trainingData, trainingOutputs, 1, 2)
 
 def create_dynamic_model(weights, net_metadata, train_metadata, ewc_data):
     '''
@@ -86,7 +85,8 @@ def build_model():
         model_id=uuid.uuid4(),
         init_model_function=build_model_baked,
         apply_model_function=apply_network_inf,
-        weights=weights,  
+        incremental_learn_function=incremental_learn_function,
+        weights=weights,
         metadata=metadata,
         data_dimensionality=metadata['net_metadata']['spatial_dims']
     )
