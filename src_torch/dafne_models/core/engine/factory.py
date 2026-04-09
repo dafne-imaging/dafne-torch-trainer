@@ -9,7 +9,6 @@ from .callbacks.callbacks import (
     VisualizationCallback,
     GradualUnfreezeCallback,
     ClearGPUMemory,
-    ContinualLearningCallback
 )
 from .callbacks.save_metrics_callbacks import (
     CSVLoggingCallback,
@@ -64,14 +63,6 @@ def create_supervised_trainer(
                                             task=task, 
                                             on_log=on_log)
     gpu_cleanup_cb = ClearGPUMemory()
-    cont_learn_cb = ContinualLearningCallback(val_loader=val_loader,
-                                              device=device,
-                                              save_path=save_path,
-                                              lambda_reg=lambda_reg,
-                                              criterion=criterion,
-                                              spatial_dims=spatial_dims,
-                                              val_roi_size=val_roi_size)
-
     if early_stopping:
         early_stop_cb = EarlyStoppingCallback(patience=20, monitor='avg_dice', on_log=on_log)
 
@@ -103,7 +94,6 @@ def create_supervised_trainer(
     trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, vis_cb.on_epoch_completed)
     trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, tb_cb.on_epoch_completed)
     trainer.add_event_handler(EngineEvents.COMPLETED, tb_cb.on_completed)
-    trainer.add_event_handler(EngineEvents.COMPLETED, cont_learn_cb.on_completed)
 
     if early_stopping:
         trainer.add_event_handler(EngineEvents.EPOCH_COMPLETED, early_stop_cb.on_epoch_completed)
