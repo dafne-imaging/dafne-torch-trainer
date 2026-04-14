@@ -10,7 +10,6 @@ from collections import OrderedDict
 
 from dafne_dl.DynamicTorchModel import DynamicTorchModel
 
-
 def apply_network_inf(model_obj, data_dict: dict) -> dict:
     from dafne_inference.inference import run_inference
     return run_inference(model_obj, data_dict)

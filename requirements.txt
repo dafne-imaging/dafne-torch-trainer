@@ -1,8 +1,6 @@
 #git dependencies
-dafne-dl @ git+https://github.com/dafne-imaging/dafne-dl.git@master
-#dafne-monai-inference @ git+https://github.com/dafne-imaging/dafne-monai-inference.git@main
-
-dafne-monai-inference >= 0.2.2
+dafne-dl
+dafne-monai-inference
 
 #Core
 torch>=2.0                                                                                                              
