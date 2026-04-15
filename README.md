@@ -1,19 +1,15 @@
 # dafne-torch-trainer
 
-PyTorch-based model trainer for the Dafne segmentation framework. Trains 2D and 3D U-Net-style models on medical images (NIfTI format) and serializes them into the `.model` format used by `dafne-dl`.
+[![PyPI version](https://img.shields.io/pypi/v/dafne-torch-trainer)](https://pypi.org/project/dafne-torch-trainer/)
+[![Python](https://img.shields.io/pypi/pyversions/dafne-torch-trainer)](https://pypi.org/project/dafne-torch-trainer/)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-## Dependencies
-
-- `dafne-dl` (from `dafne-imaging/dafne-dl`, branch `master`)
-- `dafne-monai-inference` (from `dafne-imaging/dafne-monai-inference`, branch `main`)
-- PyTorch >= 2.0, MONAI >= 1.3, PyQt5 >= 5.15
-
-See `requirements.txt` for the full list.
+PyTorch-based model trainer for the [Dafne](https://github.com/dafne-imaging) segmentation framework. Trains 2D and 3D U-Net-style models on medical images and serializes them into the `.model` format used by `dafne-dl`.
 
 ## Installation
 
-```
-pip install -e .
+```bash
+pip install dafne-torch-trainer
 ```
 
 Requires Python >= 3.9. A CUDA-capable GPU is strongly recommended for training.
@@ -59,57 +55,11 @@ The `.model` file embeds:
 
 The `_ewc.pt` file is saved at the end of every training run regardless of mode. It is required when running a subsequent continual learning session on the same output directory.
 
-## Project structure
-
-```
-src_torch/dafne_models/
-    bin/                    # CLI entry points and model serialization
-        train_cli.py        # CLI trainer
-        create_torch_model.py  # DynamicTorchModel creation and serialization
-    config/
-        config_params.py    # Dataclasses for model, dataset, training, and metrics config
-    core/
-        data_manager.py     # Dataset split, CacheDataset, DataLoader construction
-        train.py            # Main training loop (called by GUI and CLI)
-        training_worker_engine.py  # PyQt5 QThread worker that wraps train.py
-        transform/
-            transforms_builder.py   # MONAI transform pipelines for training and fine-tuning
-            custom_transforms.py    # Project-specific custom transforms
-        engine/
-            trainer_engine.py   # Custom training engine (trainer + evaluator loop)
-            factory.py          # Engine factory (assembles trainer with callbacks)
-            state.py            # Engine state dataclass
-            events.py           # Engine event enum
-            tasks/
-                supervised_task.py          # Forward pass, loss, optimizer step
-                continual_learning_task.py  # EWC-regularized train step
-            callbacks/
-                callbacks.py        # MetricsCallback, CheckpointCallback, EarlyStoppingCallback,
-                                    # VisualizationCallback, GradualUnfreezeCallback, ClearGPUMemory,
-                                    # ContinualLearningCallback (FIM + theta* computation)
-                save_metrics_callbacks.py  # TensorBoard and CSV logging
-    models/
-        dafne_networks.py   # Network architecture definitions
-        factory.py          # ModelFactory: instantiation, LoRA wrapping, layer freezing
-        wrapper.py          # DafneModelWrapper: load/save weights and metadata
-        lora/
-            layers.py       # LoRA linear layers
-            lora_models.py  # LoRA model wrapping utilities
-    ui/
-        ModelTrainerSplit.py    # Main PyQt5 GUI window
-        training_controller.py # GUI-side training control logic
-        FineTuningDialog.py     # Fine-tuning options dialog
-        AugmentationDialog_Ui.py  # Augmentation settings dialog (generated UI)
-    utils/
-        data_fingerprint.py # Dataset statistics: spacing, shape, label count
-        optimizer.py        # Optimizer utilities (discriminative LR helpers)
-```
-
 ## CLI usage
 
 ### Training from scratch
 
-```
+```bash
 dafne_train --data <data_dir> --output <output_path> [options]
 ```
 
@@ -130,15 +80,15 @@ dafne_train --data <data_dir> --output <output_path> [options]
 | `--scheduler` | | off | Enable learning rate scheduler |
 
 Example:
-```
+```bash
 dafne_train -d /data/training_set -o /models/my_model.model --epochs 100 --lr 0.0005 --early-stopping
 ```
 
 ### Fine-tuning an existing model
 
-Pass `--pretrained` with the path to an existing `.model` file, and set `--mode` to `finetune` or `lora`.
+Pass `--pretrained` with the path to an existing `.model` file, and set `--mode` to `finetune`, `lora`, or `continual`.
 
-```
+```bash
 dafne_train --data <data_dir> --output <output_path> --pretrained <model_path> --mode finetune [options]
 ```
 
@@ -153,19 +103,19 @@ dafne_train --data <data_dir> --output <output_path> --pretrained <model_path> -
 | `--lambda-reg` | 1.0 | EWC regularization weight (used with `--mode continual`) |
 
 Example — fine-tuning with 70% of layers frozen:
-```
+```bash
 dafne_train -d /data/new_data -o /models/finetuned.model --pretrained /models/base.model \
     --mode finetune --freeze-degree 0.7 --gradual-unfreeze --epochs 30
 ```
 
 Example — LoRA adaptation:
-```
+```bash
 dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.model \
     --mode lora --lora-rank 8 --lora-alpha 16 --epochs 30
 ```
 
 Example — continual learning with EWC:
-```
+```bash
 dafne_train -d /data/task_b -o /models/mymodel/mymodel.model --pretrained /models/mymodel/mymodel.model \
     --mode continual --lambda-reg 1.0 --epochs 30
 ```
@@ -178,7 +128,3 @@ dafne_train -d /data/task_b -o /models/mymodel/mymodel.model --pretrained /model
 - **Fine-tuning** (`--mode finetune`): loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing and gradual unfreezing.
 - **LoRA** (`--mode lora`): injects low-rank adapter layers into the frozen base model. Only adapter weights are trained. Useful for adaptation with very little data.
 - **Continual learning** (`--mode continual`): fine-tunes on a new task while penalizing changes to weights that were important for the previous task, using Elastic Weight Consolidation (EWC). The penalty is `λ * Σ F_i * (θ_i - θ*_i)²`, where `F` is the diagonal Fisher Information Matrix and `θ*` are the weights from the prior training run. Both are loaded from `_ewc.pt`.
-
-## Notes
-
-- The `build/` directory at the repo root can be removed.
