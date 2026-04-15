@@ -2,8 +2,6 @@ import logging
 import numpy as np
 import torch
 
-from monai.data import Dataset, DataLoader
-
 logger = logging.getLogger(__name__)
 from monai.data.utils import pad_list_data_collate
 

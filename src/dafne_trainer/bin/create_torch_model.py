@@ -1,13 +1,4 @@
-import sys
-import os
-import torch
-import numpy as np
-import dill
-import argparse
-import json
 import uuid
-from collections import OrderedDict
-
 from dafne_dl.DynamicTorchModel import DynamicTorchModel
 
 def apply_network_inf(model_obj, data_dict: dict) -> dict:

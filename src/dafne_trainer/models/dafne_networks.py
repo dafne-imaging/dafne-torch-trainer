@@ -1,5 +1,4 @@
 import torch.nn as nn
-import torch.nn.functional as F
 import monai.networks.nets as monai_nets
 
 # just defined a model class: Unet from MONAI framework

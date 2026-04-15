@@ -1,16 +1,9 @@
 import logging
 import os
-import traceback
 import random as rd
 import numpy as np
-from dataclasses import asdict
 
 import torch
-from torch.optim.lr_scheduler import CosineAnnealingLR
-
-from monai.data import DataLoader
-from monai.losses import DiceCELoss
-from monai.data.utils import pad_list_data_collate
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
@@ -31,16 +24,8 @@ class QtSignalHandler(logging.Handler):
 
 from .train import run_training
 
-from ..utils.data_fingerprint import DatasetFingerprint
-
-from .engine.factory import create_supervised_trainer
-from .engine.events import EngineEvents
-
 from ..config.config_params import ModelConfig, DatasetConfig, TrainingConfig, InferenceMetricsConfig
-from ..models.factory import ModelFactory
-from ..models.wrapper import DafneModelWrapper
-from .data_manager import DafneDataModule
-from .transform.transforms_builder import TransformBuilderTraining, TransformBuilderFineTuning
+
 
 
 class TrainingWorker(QThread):
@@ -133,7 +118,7 @@ class TrainingWorker(QThread):
     def run(self):
         handler = QtSignalHandler(self.sig_log)
         handler.setFormatter(logging.Formatter('%(name)s — %(message)s'))
-        logger = logging.getLogger('dafne_models')
+        logger = logging.getLogger('dafne_trainer')
         logger.setLevel(logging.DEBUG)
         logger.addHandler(handler)
         try:
