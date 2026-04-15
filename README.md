@@ -114,12 +114,6 @@ dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.mo
     --mode lora --lora-rank 8 --lora-alpha 16 --epochs 30
 ```
 
-Example — continual learning with EWC:
-```bash
-dafne_train -d /data/task_b -o /models/mymodel/mymodel.model --pretrained /models/mymodel/mymodel.model \
-    --mode continual --lambda-reg 1.0 --epochs 30
-```
-
 > The output directory must already contain a `_ewc.pt` file produced by a prior training run on the same path.
 
 ## Training modes
@@ -127,4 +121,3 @@ dafne_train -d /data/task_b -o /models/mymodel/mymodel.model --pretrained /model
 - **From scratch** (`--mode scratch`): network architecture and preprocessing are derived automatically from dataset statistics (median spacing, median shape, label count).
 - **Fine-tuning** (`--mode finetune`): loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing and gradual unfreezing.
 - **LoRA** (`--mode lora`): injects low-rank adapter layers into the frozen base model. Only adapter weights are trained. Useful for adaptation with very little data.
-- **Continual learning** (`--mode continual`): fine-tunes on a new task while penalizing changes to weights that were important for the previous task, using Elastic Weight Consolidation (EWC). The penalty is `λ * Σ F_i * (θ_i - θ*_i)²`, where `F` is the diagonal Fisher Information Matrix and `θ*` are the weights from the prior training run. Both are loaded from `_ewc.pt`.
