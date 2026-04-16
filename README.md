@@ -1,7 +1,7 @@
-# dafne-torch-trainer
+# DANTE — DAfNe TrainEr
 
-[![PyPI version](https://img.shields.io/pypi/v/dafne-torch-trainer)](https://pypi.org/project/dafne-torch-trainer/)
-[![Python](https://img.shields.io/pypi/pyversions/dafne-torch-trainer)](https://pypi.org/project/dafne-torch-trainer/)
+[![PyPI version](https://img.shields.io/pypi/v/dante-trainer)](https://pypi.org/project/dante-trainer/)
+[![Python](https://img.shields.io/pypi/pyversions/dante-trainer)](https://pypi.org/project/dante-trainer/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 PyTorch-based model trainer for the [Dafne](https://github.com/dafne-imaging) segmentation framework. Trains 2D and 3D U-Net-style models on medical images and serializes them into the `.model` format used by `dafne-dl`.
@@ -9,7 +9,7 @@ PyTorch-based model trainer for the [Dafne](https://github.com/dafne-imaging) se
 ## Installation
 
 ```bash
-pip install dafne-torch-trainer
+pip install dante-trainer
 ```
 
 Requires Python >= 3.9. A CUDA-capable GPU is strongly recommended for training.
@@ -18,8 +18,8 @@ Requires Python >= 3.9. A CUDA-capable GPU is strongly recommended for training.
 
 | Command | Description |
 |---|---|
-| `dafne_trainer` | Launch the PyQt5 GUI trainer |
-| `dafne_train` | Command-line training interface |
+| `dante` | Launch the PyQt5 GUI trainer |
+| `dante_train` | Command-line training interface |
 
 ## Input data format
 
@@ -58,7 +58,7 @@ The `.model` file embeds:
 ### Training from scratch
 
 ```bash
-dafne_train --data <data_dir> --output <output_path> [options]
+dante_train --data <data_dir> --output <output_path> [options]
 ```
 
 | Argument | Short | Default | Description |
@@ -79,7 +79,7 @@ dafne_train --data <data_dir> --output <output_path> [options]
 
 Example:
 ```bash
-dafne_train -d /data/training_set -o /models/my_model.model --epochs 100 --lr 0.0005 --early-stopping
+dante_train -d /data/training_set -o /models/my_model.model --epochs 100 --lr 0.0005 --early-stopping
 ```
 
 ### Fine-tuning an existing model
@@ -87,7 +87,7 @@ dafne_train -d /data/training_set -o /models/my_model.model --epochs 100 --lr 0.
 Pass `--pretrained` with the path to an existing `.model` file, and set `--mode` to `finetune`, `lora`, or `continual`.
 
 ```bash
-dafne_train --data <data_dir> --output <output_path> --pretrained <model_path> --mode finetune [options]
+dante_train --data <data_dir> --output <output_path> --pretrained <model_path> --mode finetune [options]
 ```
 
 | Argument | Default | Description |
@@ -102,13 +102,13 @@ dafne_train --data <data_dir> --output <output_path> --pretrained <model_path> -
 
 Example — fine-tuning with 70% of layers frozen:
 ```bash
-dafne_train -d /data/new_data -o /models/finetuned.model --pretrained /models/base.model \
+dante_train -d /data/new_data -o /models/finetuned.model --pretrained /models/base.model \
     --mode finetune --freeze-degree 0.7 --gradual-unfreeze --epochs 30
 ```
 
 Example — LoRA adaptation:
 ```bash
-dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.model \
+dante_train -d /data/new_data -o /models/lora.model --pretrained /models/base.model \
     --mode lora --lora-rank 8 --lora-alpha 16 --epochs 30
 ```
 

@@ -55,7 +55,7 @@ _GRID_COLOR  = '#cccccc'
 _SPINE_COLOR = '#cccccc'
 _TICK_COLOR  = '#555555'
 
-_ICON_PATH = os.path.join(os.path.dirname(__file__), '..', 'icons', 'icon_dafne_trainer.png')
+_ICON_PATH = os.path.join(os.path.dirname(__file__), '..', 'icons', 'icon_dante.png')
 
 
 def _make_app_icon() -> QIcon:

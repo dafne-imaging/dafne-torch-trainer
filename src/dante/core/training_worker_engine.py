@@ -118,7 +118,7 @@ class TrainingWorker(QThread):
     def run(self):
         handler = QtSignalHandler(self.sig_log)
         handler.setFormatter(logging.Formatter('%(name)s — %(message)s'))
-        logger = logging.getLogger('dafne_trainer')
+        logger = logging.getLogger('dante')
         logger.setLevel(logging.DEBUG)
         logger.addHandler(handler)
         try:
