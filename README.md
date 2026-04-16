@@ -1,7 +1,7 @@
 # DANTE — DAfNe TrainEr
 
-[![PyPI version](https://img.shields.io/pypi/v/dante-trainer)](https://pypi.org/project/dante-trainer/)
-[![Python](https://img.shields.io/pypi/pyversions/dante-trainer)](https://pypi.org/project/dante-trainer/)
+[![PyPI version](https://img.shields.io/badge/pypi-v1.0.3b1-blue)](https://pypi.org/project/dante-trainer/)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://pypi.org/project/dante-trainer/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 PyTorch-based model trainer for the [Dafne](https://github.com/dafne-imaging) segmentation framework. Trains 2D and 3D U-Net-style models on medical images and serializes them into the `.model` format used by `dafne-dl`.
