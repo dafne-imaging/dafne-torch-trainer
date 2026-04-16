@@ -40,7 +40,6 @@ All files produced by a training run are saved inside a dedicated folder named a
     mymodel.model          # final serialized model (DynamicTorchModel format)
     mymodel_best_model.pth # best checkpoint by validation Dice (removed after packaging)
     mymodel.csv            # per-epoch metrics log
-    _ewc.pt                # EWC snapshot (Fisher matrix + parameter snapshot, always saved)
     logs/
         train/             # TensorBoard training logs
         val/               # TensorBoard validation logs
@@ -51,9 +50,8 @@ The `.model` file embeds:
 - model weights
 - network architecture metadata (model name, spatial dims, patch size, spacing, etc.)
 - training metadata
+- EWC snapshot (Fisher Information Matrix + parameter snapshot, used for continual learning)
 - a dependency hint pointing to `dafne-monai-inference` for inference-time use
-
-The `_ewc.pt` file is saved at the end of every training run regardless of mode. It is required when running a subsequent continual learning session on the same output directory.
 
 ## CLI usage
 
@@ -114,10 +112,9 @@ dafne_train -d /data/new_data -o /models/lora.model --pretrained /models/base.mo
     --mode lora --lora-rank 8 --lora-alpha 16 --epochs 30
 ```
 
-> The output directory must already contain a `_ewc.pt` file produced by a prior training run on the same path.
-
 ## Training modes
 
 - **From scratch** (`--mode scratch`): network architecture and preprocessing are derived automatically from dataset statistics (median spacing, median shape, label count).
 - **Fine-tuning** (`--mode finetune`): loads an existing `.model` file and resumes training, preserving the original architecture. Supports partial freezing and gradual unfreezing.
 - **LoRA** (`--mode lora`): injects low-rank adapter layers into the frozen base model. Only adapter weights are trained. Useful for adaptation with very little data.
+- **Continual learning** (`--mode continual`): fine-tunes on a new task while penalizing changes to weights that were important for the previous task, using Elastic Weight Consolidation (EWC). Requires `--pretrained` pointing to a `.model` file produced by a prior training run.
