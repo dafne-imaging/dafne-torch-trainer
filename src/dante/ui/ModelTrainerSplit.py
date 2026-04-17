@@ -663,10 +663,8 @@ class ModelTrainerSplit(QWidget):
 
         if mode == 'lora':
             self.finetuning_settings_btn.setText("Fine-tuning settings... (LoRA)")
-            self.lr_spin.setValue(1e-4)
         elif mode == 'finetune':
             self.finetuning_settings_btn.setText("Fine-tuning settings... (Classic)")
-            self.lr_spin.setValue(1e-4)
         else:
             self.finetuning_settings_btn.setText("Fine-tuning settings...")
             self.lr_spin.setValue(1e-3)
