@@ -1,5 +1,6 @@
 import torch.nn as nn
 import monai.networks.nets as monai_nets
+from monai.networks.blocks import Convolution, ResidualUnit
 
 # just defined a model class: Unet from MONAI framework
 
@@ -47,14 +48,40 @@ class DafneUnetModel(nn.Module):
         return self.unet_model(x)
     
     def update_output_channels(self, n_classes:int):
-        conv_transp_fn = getattr(nn, f'ConvTranspose{self.spatial_dims}d')
-        old_conv = self.unet_model.model[-1][0].conv
+        m = self.unet_model
+        old_up = m.model[-1]
+
+        if isinstance(old_up, nn.Sequential):
+            old_conv_block, has_ru = old_up[0], True
+        else:
+            old_conv_block, has_ru = old_up, False
+
+        old_conv = old_conv_block.conv
         in_channels = old_conv.in_channels
-        self.unet_model.out_channels = n_classes
-        self.unet_model.model[-1][0].conv = conv_transp_fn(in_channels, 
-                                                     n_classes, 
-                                                     kernel_size=old_conv.kernel_size,
-                                                     padding=old_conv.padding)
+        stride = m.strides[0]
+
+        new_conv_block = Convolution(
+            m.dimensions, in_channels, n_classes,
+            strides=stride, kernel_size=m.up_kernel_size,
+            act=m.act, norm=m.norm, dropout=m.dropout, bias=m.bias,
+            conv_only=not has_ru, is_transposed=True,
+            adn_ordering=m.adn_ordering,
+        )
+
+        if has_ru:
+            new_ru = ResidualUnit(
+                m.dimensions, n_classes, n_classes,
+                strides=1, kernel_size=m.kernel_size, subunits=1,
+                act=m.act, norm=m.norm, dropout=m.dropout, bias=m.bias,
+                last_conv_only=True, adn_ordering=m.adn_ordering,
+            )
+            new_up = nn.Sequential(new_conv_block, new_ru)
+        else:
+            new_up = new_conv_block
+
+        new_up = new_up.to(old_conv.weight.device)
+        m.model[-1] = new_up
+        m.out_channels = n_classes
         self.out_channels = n_classes
     
 

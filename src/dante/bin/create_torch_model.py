@@ -5,9 +5,9 @@ def apply_network_inf(model_obj, data_dict: dict) -> dict:
     from dafne_inference.inference import run_inference
     return run_inference(model_obj, data_dict)
 
-def incremental_learn_function(model_obj, trainingData, trainingOutputs):
+def incremental_learn_function(model_obj, trainingData, trainingOutputs, bs, minTrainImages):
     from dafne_inference.incremental import run_incremental_learning
-    return run_incremental_learning(model_obj, trainingData, trainingOutputs, 1, 2)
+    return run_incremental_learning(model_obj, trainingData, trainingOutputs, bs, minTrainImages)
 
 def create_dynamic_model(weights, net_metadata, train_metadata, ewc_data):
     '''
@@ -23,7 +23,7 @@ def create_dynamic_model(weights, net_metadata, train_metadata, ewc_data):
         'net_metadata': net_metadata,
         'train_metadata': train_metadata,
         'dependencies': {
-            'dafne_inference': 'dafne-monai-inference>=0.1.0'
+            'dafne_inference': 'dafne-monai-inference>=1.0.2'
         },
         'ewc_data': ewc_data,
         # Dafne metadata fields

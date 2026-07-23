@@ -132,3 +132,12 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.claude/
+.opencode/
+.agents/
+graphify-out/
+.graphifyignore
+AGENTS.md 
+CLAUDE.md
+skills-lock.json

@@ -1,6 +1,6 @@
 #git dependencies
 dafne-dl
-dafne-monai-inference
+dafne-monai-inference>=1.0.2
 
 #Core
 torch>=2.0                                                                                                              
