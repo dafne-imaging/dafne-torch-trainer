@@ -3,10 +3,10 @@
 import os 
 import sys
 
-local_src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src_torch')
+local_src_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'src')
 sys.path.insert(0, local_src_path)
 
-from dafne_models.ui.ModelTrainerSplit import main as execute_model_trainer
+from dante.ui.ModelTrainerSplit import main as execute_model_trainer
 
 if __name__=='__main__':
     execute_model_trainer()
